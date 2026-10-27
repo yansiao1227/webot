@@ -18,6 +18,24 @@ class AdaptiveTests(unittest.IsolatedAsyncioTestCase):
         self.backend=AdaptiveBackend();self.mcp=FakeMCP();self.agent=Agent(self.store,self.mcp,self.backend,CONFIG)
     async def asyncTearDown(self):self.store.close();self.temp.cleanup()
 
+    async def test_stream_notice_is_once_per_request_across_model_turns(self):
+        self.store.ingest([event('long-one'),event('long-two')])
+        calls={}
+        async def stream(tid,request,callback):
+            eid=request['event_id'];calls[eid]=calls.get(eid,0)+1
+            await callback('内容过长，正在输出，请稍等……',
+                {'key':'streaming_long_reply','kind':'streaming_notice'})
+            return ('第一段',{'continue_reply':True,'next_step':'继续'}) if calls[eid]==1 else ('第二段',{})
+        self.backend.generate_with_progress=stream
+        for eid in ('long-one','long-two'):
+            while True:
+                job=next((j for j in self.store.ready() if j['event_id']==eid),None)
+                if job is None:break
+                await self.agent.process(job)
+        self.assertEqual([p['text'] for p in self.mcp.sent],
+            ['内容过长，正在输出，请稍等……','第一段','第二段']*2)
+        self.assertEqual([p['part_index'] for p in self.mcp.sent],[0,1,2]*2)
+
     async def test_uncertain_startup_never_retries_or_sends_completion(self):
         self.store.ingest([event('startup-unknown')])
         self.backend.generate=AsyncMock(side_effect=ModelTimeout('thread',None,False,'startup'))

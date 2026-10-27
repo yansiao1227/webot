@@ -12,6 +12,40 @@ def notification(method, kind, item_id, turn='turn', **fields):
 
 
 class ProgressTests(unittest.IsolatedAsyncioTestCase):
+    async def test_long_stream_notice_is_delayed_and_sent_once(self):
+        callback=AsyncMock()
+        clock=DecisionClock('turn',1,1,callback,generation_idle_timeout=2)
+        async def delta(turn='turn',text='{"reply":'):
+            await clock.observe(SimpleNamespace(method='item/agentMessage/delta',
+                payload={'turnId':turn,'itemId':'answer','delta':text}))
+        await delta()
+        callback.assert_not_awaited()
+        clock.stream_started_at -= 31
+        await delta('other')
+        await delta(text='')
+        callback.assert_not_awaited()
+        await delta()
+        callback.assert_awaited_once_with('内容过长，正在输出，请稍等……',
+            {'key':'streaming_long_reply','kind':'streaming_notice'})
+        self.assertGreater(clock.idle_deadline-clock.loop.time(),1.5)
+        await clock.observe(notification('item/completed','agentMessage','answer',phase='final_answer',text='完成'))
+        await delta()
+        clock.stream_started_at -= 31
+        await delta()
+        self.assertEqual(callback.await_count,1)
+        self.assertEqual(clock.decision_count,0)
+
+    async def test_long_stream_notice_does_not_extend_total_and_failure_propagates(self):
+        callback=AsyncMock(side_effect=ProgressDeliveryError('unknown'))
+        clock=DecisionClock('turn',1,1,callback,total_deadline=asyncio.get_running_loop().time()+60)
+        deadline=clock.total_deadline
+        clock.stream_started_at=clock.loop.time()-31
+        with self.assertRaises(ProgressDeliveryError):
+            await clock.observe(SimpleNamespace(method='item/agentMessage/delta',
+                payload={'turnId':'turn','itemId':'answer','delta':'x'}))
+        self.assertEqual(clock.total_deadline,deadline)
+        self.assertIsNone(clock.sending_deadline)
+
     async def test_tool_can_outlast_decision_budget_and_then_finish(self):
         callback=AsyncMock()
         clock=DecisionClock('turn',.04,.3,callback)

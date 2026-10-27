@@ -7,6 +7,9 @@ class ProgressDeliveryError(Exception):
 
 
 class DecisionClock:
+    STREAM_NOTICE_SECONDS = 30
+    STREAM_NOTICE_TEXT = '内容过长，正在输出，请稍等……'
+    STREAM_NOTICE_KEY = 'streaming_long_reply'
     TOOL_TEXT = {
         'webSearch': '我先联网搜索，核对相关资料。',
         'commandExecution': '我先运行本地工具核对所需信息。',
@@ -29,6 +32,8 @@ class DecisionClock:
         self.total_deadline = total_deadline
         self.generation_idle_timeout = generation_idle_timeout
         self.generating = False
+        self.stream_started_at = None
+        self.stream_notice_sent = False
         self.first_decision_seconds = None
         self.tools = {}
         self.seen = set()
@@ -56,7 +61,7 @@ class DecisionClock:
             self.idle_deadline = self.loop.time() + self.decision_timeout
             self.changed.set()
 
-    async def publish(self, text, key, kind):
+    async def publish(self, text, key, kind, *, streaming=False):
         if not self.callback:
             return
         self.sending_deadline = self.loop.time() + 15
@@ -65,7 +70,7 @@ class DecisionClock:
             await asyncio.wait_for(self.callback(text, {'key': key, 'kind': kind}), 15)
         finally:
             self.sending_deadline = None
-            self.idle_deadline = self.loop.time() + self.decision_timeout
+            self.idle_deadline = self.loop.time() + (self.generation_idle_timeout if streaming else self.decision_timeout)
             self.changed.set()
 
     async def observe(self, notification):
@@ -83,8 +88,17 @@ class DecisionClock:
             if value.get('itemId') and isinstance(delta, str) and delta:
                 self.ready()
                 self.generating = True
+                if self.stream_started_at is None:
+                    self.stream_started_at = self.loop.time()
                 self.idle_deadline = self.loop.time() + self.generation_idle_timeout
                 self.changed.set()
+                if (not self.stream_notice_sent and not self.tools and self.callback and
+                        self.loop.time() - self.stream_started_at >= self.STREAM_NOTICE_SECONDS):
+                    self.stream_notice_sent = True
+                    # Stable across model turns: the durable reply-part callback
+                    # suppresses this notice for the entire inbound request.
+                    await self.publish(self.STREAM_NOTICE_TEXT, self.STREAM_NOTICE_KEY,
+                                       'streaming_notice', streaming=True)
             return
         if not item_id:
             return
@@ -98,6 +112,8 @@ class DecisionClock:
         if identity in self.seen:
             return
         self.seen.add(identity)
+        if method == 'item/completed' and kind == 'agentMessage':
+            self.stream_started_at = None
         if method == 'item/completed' and kind == 'agentMessage' and item.get('phase') in ('commentary', 'partial_answer'):
             text = item.get('text', '').strip()
             # Structured final/planning fields and raw reasoning are never forwarded.
@@ -115,6 +131,7 @@ class DecisionClock:
         if kind in self.TOOL_TEXT:
             if method == 'item/started':
                 self.generating = False
+                self.stream_started_at = None
                 self.tool_started_count += 1
                 if self.first_decision_seconds is None:
                     self.first_decision_seconds = round(self.loop.time() - self.started, 3)
@@ -136,6 +153,7 @@ class DecisionClock:
             elif method == 'item/completed':
                 self.tools.pop(item_id, None)
                 self.generating = False
+                self.stream_started_at = None
                 self.idle_deadline = self.loop.time() + self.decision_timeout
                 self.changed.set()
 
