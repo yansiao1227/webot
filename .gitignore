@@ -1,0 +1,51 @@
+work/
+__pycache__/
+*.pyc
+
+# Local runtime data: credentials, messages, sessions, browser profiles and models.
+state/
+# Content-reading runtime cache and migration manifests (workspace local only).
+/tool/state/cache/
+build/
+dist/
+.venv/
+venv/
+node_modules/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Local secrets and configuration (keep only explicit example templates).
+.env
+.env.*
+!.env.example
+!.env.sample
+credentials.json
+secrets.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.dmp
+*.zip
+*.7z
+*.exe
+*.dll
+*.pdb
+*.obj
+*.o
+
+# Machine-specific editor settings and internal conversation/validation records.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+/docs/PROJECT_STATUS.md
+/docs/REFERENCE_CONTEXT.md
