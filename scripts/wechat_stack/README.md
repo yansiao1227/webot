@@ -26,7 +26,7 @@ python -B -X utf8 .\scripts\wechat_stack\manage.py stop
 
 需要 PATH 中可用的 Python、已安装的 Codex SDK 环境、Hook 构建产物和各模块配置。微信与管理脚本应由配置凭据的同一 Windows 用户运行。
 
-根目录 `.env` 设置监听地址、端口、Python、Codex 和状态目录。模板见 [.env.example](../../../.env.example)，变量说明见[环境配置](../../../docs/ENVIRONMENT.md)。修改端口或状态目录前，先使用原配置停止服务。
+根目录 `.env` 设置监听地址、端口、Python、Codex 和状态目录。模板见 [.env.example](../../.env.example)，变量说明见[环境配置](../../docs/ENVIRONMENT.md)。修改端口或状态目录前，先使用原配置停止服务。
 
 | 项目 | 默认位置或地址 |
 | --- | --- |

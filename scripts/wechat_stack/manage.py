@@ -216,7 +216,7 @@ def stop_one(name):
 
 def start():
     if not PYTHON.is_file():
-        raise RuntimeError('未找到 Codex Python 环境，请按 wechat_codex/docs/README.md 安装')
+        raise RuntimeError('未找到 Codex Python 环境，请按 wechat_codex/README.md 安装')
     config, hook_token, mcp_token = configuration()
     # 加载 DLL 或启动任何进程前，先检查所有端口。
     for name, (_, _, port) in SPECS.items():

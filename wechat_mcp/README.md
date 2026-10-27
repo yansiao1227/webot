@@ -8,7 +8,7 @@
 - 持久保存事件、消费者位置、投递任务和回复意图，支持独立消费者及重启续取。
 - 使用 `reply_text(event_id, text)` 回复原事件所属会话，以事件及回复意图避免重复发送。
 - 桥接同账号、同会话的精确引用、附件资源读取和原生已读操作。
-- 为定时任务保存原会话长期授权，按任务、执行和分段持久化投递意图；调度由 `wechat_codex` 等宿主负责，见[接口说明](API.md#定时任务授权与投递)。
+- 为定时任务保存原会话长期授权，按任务、执行和分段持久化投递意图；调度由 `wechat_codex` 等宿主负责，见[接口说明](docs/API.md#定时任务授权与投递)。
 - 按账号与会话白名单控制处理范围；群聊要求可信结构化 @ 名单包含当前账号。
 
 桥接通过 HTTP 访问 `client_hook`，不读取其数据库或直接调用微信 DLL。非文字事件本身不触发回复；资源读取与回复均受授权约束。
@@ -25,7 +25,7 @@ python -B -X utf8 .\wechat_mcp\bridge.py demo
 
 ## 接入 stdio
 
-将 [mcp.stdio.example.json](../mcp.stdio.example.json) 中的配置加入宿主支持的 MCP 配置位置，并把宿主工作目录设为项目根目录。示例使用模拟模式。
+将 [mcp.stdio.example.json](mcp.stdio.example.json) 中的配置加入宿主支持的 MCP 配置位置，并把宿主工作目录设为项目根目录。示例使用模拟模式。
 
 连接真实上游时，宿主可启动以下命令：
 
@@ -47,11 +47,11 @@ python -B -X utf8 .\wechat_mcp\bridge.py serve `
   --account wxid_当前账号 --allow-conversation wxid_允许私聊
 ```
 
-默认 MCP URL 为 `http://127.0.0.1:30002/mcp`，上游为 `http://127.0.0.1:30001`。所有 HTTP 接口（包括 `/health`）需要 `Authorization: Bearer <MCP_BRIDGE_TOKEN>`。地址可通过根目录 `.env`、`--port` 和 `--hook-url` 配置，详见[环境配置](../../docs/ENVIRONMENT.md)。
+默认 MCP URL 为 `http://127.0.0.1:30002/mcp`，上游为 `http://127.0.0.1:30001`。所有 HTTP 接口（包括 `/health`）需要 `Authorization: Bearer <MCP_BRIDGE_TOKEN>`。地址可通过根目录 `.env`、`--port` 和 `--hook-url` 配置，详见[环境配置](../docs/ENVIRONMENT.md)。
 
 模拟 HTTP 服务可使用 `serve --simulate`。仅模拟模式提供 `POST /simulation/messages`，且仍需认证。模拟与真实模式默认分别使用 `state/simulation/` 和 `state/live/`。
 
-整套服务启动器从 `state/live/config.json` 读取账号和白名单，从 `credentials.json` 读取 Windows DPAPI 密文凭据；直接执行 `bridge.py serve` 则需提供上述参数和环境变量。日常管理见[一键管理说明](../../scripts/wechat_stack/docs/README.md)。
+整套服务启动器从 `state/live/config.json` 读取账号和白名单，从 `credentials.json` 读取 Windows DPAPI 密文凭据；直接执行 `bridge.py serve` 则需提供上述参数和环境变量。日常管理见[一键管理说明](../scripts/wechat_stack/README.md)。
 
 ## Agent 消费约定
 
@@ -72,7 +72,7 @@ python -B -X utf8 .\wechat_mcp\bridge.py serve `
 
 状态目录含消息正文；Windows 密钥使用当前用户 DPAPI 封装，跨用户或设备迁移不能直接解密。
 
-工具参数、资源接口和状态定义见 [API.md](API.md)，群聊规则见 [GROUP_MENTIONS.md](GROUP_MENTIONS.md)。本地回归命令：
+工具参数、资源接口和状态定义见 [API.md](docs/API.md)，群聊规则见 [GROUP_MENTIONS.md](docs/GROUP_MENTIONS.md)。本地回归命令：
 
 ```powershell
 python -B -X utf8 -W error::ResourceWarning .\wechat_mcp\run_tests.py
@@ -88,7 +88,7 @@ python -B -X utf8 -W error::ResourceWarning .\wechat_mcp\run_tests.py
 | `tests/`、`run_tests.py` | 本机模拟 HTTP 和跨层接口回归 |
 | `validation/` | 可选官方 MCP SDK 互操作验证及其独立依赖 |
 | `mcp.stdio.example.json` | stdio 接入配置示例 |
-| `docs/` | 使用与接口说明 |
+| `docs/` | API、群聊授权及验证专题文档 |
 | `state/` | 本机配置、消息队列和验证报告，不纳入源码 |
 
-普通回归不依赖官方 MCP SDK；需要验证 SDK 的 HTTP/stdio 互操作时，按 [验证说明](VALIDATION.md) 安装 `validation/requirements-sdk.txt` 并运行 `validation/sdk_validation.py`。
+普通回归不依赖官方 MCP SDK；需要验证 SDK 的 HTTP/stdio 互操作时，按 [验证说明](docs/VALIDATION.md) 安装 `validation/requirements-sdk.txt` 并运行 `validation/sdk_validation.py`。

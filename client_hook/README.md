@@ -23,7 +23,7 @@
 | `analysis/` | 离线入口分析与显式运行的观测工具 |
 | `tests/` | 本地回归；`lifecycle/` 为自有 host 生命周期测试 |
 | `validation/` | 真实客户端验证脚本及验证辅助代码，需显式运行 |
-| `docs/` | 使用说明与接口、原生实现文档 |
+| `docs/` | 接口、版本适配和原生实现专题文档 |
 | `build/`、`state/` | 本机构建产物和运行数据，不纳入源码 |
 
 ## 构建与启动
@@ -35,11 +35,11 @@
 python -B -X utf8 .\client_hook\client_hook.py serve
 ```
 
-服务默认地址为 `http://127.0.0.1:30001`，独立启动默认状态目录为 `client_hook/state/`。使用 `serve --state-dir <目录>` 指定持久数据位置，多个微信进程时使用 `serve --pid <PID>` 选择目标。地址配置见[环境配置](../../docs/ENVIRONMENT.md)。
+服务默认地址为 `http://127.0.0.1:30001`，独立启动默认状态目录为 `client_hook/state/`。使用 `serve --state-dir <目录>` 指定持久数据位置，多个微信进程时使用 `serve --pid <PID>` 选择目标。地址配置见[环境配置](../docs/ENVIRONMENT.md)。
 
-设置 `CLIENT_HOOK_TOKEN` 后，请求需携带 `Authorization: Bearer <token>`。用 Ctrl+C 正常停止前台服务；整套服务的日常启停见[管理说明](../../scripts/wechat_stack/docs/README.md)。
+设置 `CLIENT_HOOK_TOKEN` 后，请求需携带 `Authorization: Bearer <token>`。用 Ctrl+C 正常停止前台服务；整套服务的日常启停见[管理说明](../scripts/wechat_stack/README.md)。
 
-构建产物写入 `client_hook/build/runtime-*/`，`build/runtime-current.json` 指向所选构建。微信加载过 DLL 后，更换构建需先正常退出并重启微信；进程退出前不要覆盖或删除已加载目录。
+构建产物写入 `client_hook/build/runtime-*/`，`client_hook/build/runtime-current.json` 指向所选构建。微信加载过 DLL 后，更换构建需先正常退出并重启微信；进程退出前不要覆盖或删除已加载目录。
 
 ## 消费消息
 
@@ -57,10 +57,10 @@ python -B -X utf8 .\client_hook\client_hook.py listen --consumer-id my-agent
 
 | 入口 | 内容 |
 | --- | --- |
-| [API.md](API.md) | HTTP 路由、SDK/CLI、消息消费、发送状态与资源接口 |
-| [READ_STATE_41930.md](READ_STATE_41930.md) | 原生会话已读接口 |
-| [MENTIONS.md](MENTIONS.md) | 群聊 @ 信息来源与字段 |
-| [implementation.html](implementation.html) | 消息监听与发送实现图解 |
+| [API.md](docs/API.md) | HTTP 路由、SDK/CLI、消息消费、发送状态与资源接口 |
+| [READ_STATE_41930.md](docs/READ_STATE_41930.md) | 原生会话已读接口 |
+| [MENTIONS.md](docs/MENTIONS.md) | 群聊 @ 信息来源与字段 |
+| [implementation.html](docs/implementation.html) | 消息监听与发送实现图解 |
 | `client_hook/native/` | 原生 Hook、快照队列与运行时 |
 | `client_hook/client/`、`client_hook/api/` | Python 客户端和 HTTP 服务 |
 | `client_hook/profiles/` | 固定版本适配资料 |
@@ -74,15 +74,3 @@ python -B -X utf8 .\client_hook\run_tests.py --with-lifecycle
 ```
 
 该命令用于本地回归；真实微信的加载、收发及资源操作需要单独验证。
-
-
-## 移动项目目录后修正构建路径
-
-构建记录保存绝对路径。项目整体移动后，如果启动报 `runtime directory outside fixed workspace`，在项目根目录先检查，再应用路径修正：
-
-```powershell
-python -B -X utf8 .\client_hook\scripts\relocate_builds.py
-python -B -X utf8 .\client_hook\scripts\relocate_builds.py --apply
-```
-
-该命令要求选中构建的目录名、两份记录及全部文件摘要一致；旧目录仍存在时拒绝自动迁移。应用前备份原记录，仅修正构建路径，不加载 DLL、不修改消息数据或进程注册。自定义构建根目录可传 `--build-root <目录>`。微信仍加载旧路径 DLL 时，应先正常退出并重新打开微信。
