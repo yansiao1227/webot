@@ -1,0 +1,64 @@
+{
+  "repository": "https://github.com/aixed/WeChat-Hook",
+  "commit": "f222f70c2f80a99b918185b871aa66dbd5167083",
+  "subdirectory": "minhook",
+  "license": "minhook/LICENSE.txt",
+  "files": [
+    {
+      "path": "minhook/include/MinHook.h",
+      "sha256": "d5cf8db333895134398c7f69bac43f232835fda1cccbd86875c654cd69989b23"
+    },
+    {
+      "path": "minhook/LICENSE.txt",
+      "sha256": "4f21f857550d7be854da6ea5f2da4e6775ca4e3fbb535e4f3d961c47d0bf3335"
+    },
+    {
+      "path": "minhook/src/buffer.c",
+      "sha256": "a682198663fc9cf2878ccfbe97993f971cee0f0d146d866e315452fb5ccdc45c"
+    },
+    {
+      "path": "minhook/src/buffer.h",
+      "sha256": "96b855e0a7c6d26b496c41ac321a08af2ae17a9e7f86ebb96319e83f0ffc81df"
+    },
+    {
+      "path": "minhook/src/hde/hde32.c",
+      "sha256": "99c8c8a1ed3a3fd40a6f06339d1026d2ccb348f63836435d05c5939201751338"
+    },
+    {
+      "path": "minhook/src/hde/hde32.h",
+      "sha256": "8351e05bbbbe03ea2671863b5ab6a9e4ddc21bb08f40ed85286f8f7ce0d4a23d"
+    },
+    {
+      "path": "minhook/src/hde/hde64.c",
+      "sha256": "336917be0a96153c37d2f2c14c0a89f287f129ec85c81d8945e674046b2b14db"
+    },
+    {
+      "path": "minhook/src/hde/hde64.h",
+      "sha256": "c693f9057a0fd2ba0c667e61435081299e3a0999c0da2feb74758d1d882ea25b"
+    },
+    {
+      "path": "minhook/src/hde/pstdint.h",
+      "sha256": "df5bacabdee3d3ce433cced1dd96fbaad6211f4ef93f436fe65267289762deb7"
+    },
+    {
+      "path": "minhook/src/hde/table32.h",
+      "sha256": "d60f04db49234dd3c445d867b4b58304fb0dbba1b393c3b50e03ce1254040e9a"
+    },
+    {
+      "path": "minhook/src/hde/table64.h",
+      "sha256": "bc919f0fe7629470d416a0fa790c5b729ef0538a6ac2eff6e7e55ee4dbfbb03f"
+    },
+    {
+      "path": "minhook/src/hook.c",
+      "sha256": "2ebfc99194b98b9fda8f6045be9e6f30e50cb2671e54315ab6b1ae90eafa69b6"
+    },
+    {
+      "path": "minhook/src/trampoline.c",
+      "sha256": "e914f417f80e5a3013631c1d0fb56f1e2fc1b053cf51f20ebf413b223b34b75a"
+    },
+    {
+      "path": "minhook/src/trampoline.h",
+      "sha256": "8f624f2dea0190682273c32491d5932207be863a8826d8fea2cda84f2c965835"
+    }
+  ]
+}

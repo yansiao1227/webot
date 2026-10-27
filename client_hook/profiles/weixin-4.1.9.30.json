@@ -1,0 +1,70 @@
+{
+  "schema": "client-hook-static-profile-v1",
+  "version": "4.1.9.30",
+  "machine": "0x8664",
+  "sha256": "89fc940377a779babbd64c9cd4abe6256663681d92f12802aa2df97a8db18494",
+  "observation_call_rva": "0x9dacd0",
+  "observation_expected_hex": "e81b0f000090488b85600100004881c4",
+  "call_target_rva": "0x9dbbf0",
+  "entry_expected_hex": "5657534883ec204889ce84d2750980be",
+  "entry_prologue_instruction_lengths": [
+    1,
+    1,
+    1,
+    4
+  ],
+  "entry_relocation_span_bytes": 7,
+  "allowed_return_rva": "0x9dacd5",
+  "abi": {
+    "platform": "Windows x64",
+    "return": "void",
+    "rcx": "borrowed Wx41930Record pointer",
+    "dl": "uint8 force_refresh; only low byte consumed",
+    "extra_inputs_observed": false,
+    "snapshot_timing": "before original call",
+    "proof_scope": "instruction-aligned static analysis plus own-process ABI fixture"
+  },
+  "record_vtable_rva": "0x8096da8",
+  "record_size": "0x298",
+  "fields": {
+    "kind": "0xc",
+    "endpoint_a": "0x18",
+    "endpoint_b": "0x38",
+    "actor_candidate": "0x58",
+    "text": "0x160"
+  },
+  "live_hook_supported": true,
+  "candidate_entry_abi_verified": true,
+  "live_abi_verified": true,
+  "live_lifecycle_verified": true,
+  "live_message_receive_verified": true,
+  "resident_runtime_protocol": 3,
+  "continuous_listening_supported": true,
+  "repeated_start_stop_supported": true,
+  "repeated_start_stop_live_verified": true,
+  "resident_validation_scope": "v3 own host 7 sessions and API pipeline; live same DLL generations 1/2, restored 32 bytes, zero drops, persisted batch/token survives API restart",
+  "live_validation_scope": "v3 real private/group CH_HTTP_IN received via HTTP and acknowledged; one private and one group text send, user confirmed both visible; same DLL restart and entry restoration verified; long-term and nontext excluded",
+  "string_layout": {
+    "header_size": "0x20",
+    "length_offset": "0x10",
+    "capacity_offset": "0x18",
+    "inline_capacity_threshold": 16,
+    "element_bytes": 1,
+    "encoding_for_kind1": "UTF-8 validated, based on prior controlled text observations",
+    "max_capture_bytes": 65536,
+    "identifier_max_capture_bytes": 511
+  },
+  "notes": [
+    "observation_call_rva is an internal CALL instruction, not a MinHook function entry",
+    "RCX carries the record at this CALL; DL is set to 1",
+    "29 direct call sites and one tail jump were instruction-aligned; indirect references remain outside coverage",
+    "the helper refreshes parsed state and has side effects; it is not an incoming-only callback or destructor",
+    "filter original return address to module+9dacd5, force==1 and the fixed record vtable",
+    "the original generic fixture has a different layout; abi_fixture uses the 0x298 layout",
+    "live entry patching, one incoming group record and restoration verified; concurrent production load, unload and broader message coverage remain unverified"
+  ],
+  "historical_resident_protocol": 2,
+  "historical_resident_live_validation": "v2 same DLL three start/stop rounds; not validation of v3 sender or all-mode",
+  "v3_live_dll_sha256": "43b9b09c350391a34e2e01132bca2653a03a52e221529d6d0f5643999777f79f",
+  "v3_text_phase_live_verified": true
+}

@@ -1,0 +1,107 @@
+{
+  "artifact": "Weixin.dll",
+  "sha256": "89fc940377a779babbd64c9cd4abe6256663681d92f12802aa2df97a8db18494",
+  "module_path": "Weixin.dll",
+  "image_size": "0xad2e000",
+  "native_wrapper_vtable_rva": "0x86d02e8",
+  "native_wrapper_slots": [
+    "0x30733d0",
+    "0x30733d0",
+    "0x30733f0",
+    "0x3073420",
+    "0x95a0",
+    "0x95b0"
+  ],
+  "functions": [
+    {
+      "rva": "0x1f930",
+      "entry_bytes": "488b05813b640ac3cccccccccccccccc"
+    },
+    {
+      "rva": "0x20f20",
+      "entry_bytes": "4889d00f57c00f1102488b9118030000"
+    },
+    {
+      "rva": "0x1854b0",
+      "entry_bytes": "4889c8488b0c244889104c8940084489"
+    },
+    {
+      "rva": "0x291280",
+      "entry_bytes": "55415741565657534881ecc801000048"
+    },
+    {
+      "rva": "0x30733d0",
+      "entry_bytes": "4889d0488d150ecf6505488910488b49"
+    },
+    {
+      "rva": "0x30733d0",
+      "entry_bytes": "4889d0488d150ecf6505488910488b49"
+    },
+    {
+      "rva": "0x30733f0",
+      "entry_bytes": "4883ec28488b4108488b48384885c974"
+    },
+    {
+      "rva": "0x3073420",
+      "entry_bytes": "488d05e92a2807c3cccccccccccccccc"
+    },
+    {
+      "rva": "0x95a0",
+      "entry_bytes": "84d2740aba10000000e94af35506c3cc"
+    },
+    {
+      "rva": "0x37030",
+      "entry_bytes": "4883c110e9278c2500cccccccccccccc"
+    },
+    {
+      "rva": "0xa640",
+      "entry_bytes": "488b41104883c110488b0031d248ffe0"
+    },
+    {
+      "rva": "0xa650",
+      "entry_bytes": "4885c9740f488b01488b4010ba010000"
+    },
+    {
+      "rva": "0x20e30",
+      "entry_bytes": "564883ec404889ce488b05412bf10948"
+    },
+    {
+      "rva": "0x300340",
+      "entry_bytes": "4889d00f57c00f1102488b51304885d2"
+    },
+    {
+      "rva": "0x63f7e0",
+      "entry_bytes": "5556574881ec90000000488dac248000"
+    },
+    {
+      "rva": "0x63f6c0",
+      "entry_bytes": "5541565657534883ec30488d6c243048"
+    },
+    {
+      "rva": "0x32cd0",
+      "entry_bytes": "4157415641545657534883ec284885d2"
+    },
+    {
+      "rva": "0x166aad0",
+      "entry_bytes": "5556574883ec40488d6c244048c745f8"
+    },
+    {
+      "rva": "0x65688f8",
+      "entry_bytes": "e9f3ffffffcccccc40534883ec20488d"
+    }
+  ],
+  "client_calls_enabled": true,
+  "queue_control_vtable_rva": "0x8041a68",
+  "result_control_vtable_rva": "0x81f7378",
+  "queue_control_slots": [
+    "0x37030",
+    "0xa650"
+  ],
+  "result_control_slots": [
+    "0xa640",
+    "0xa650"
+  ],
+  "scope": "client_hook generic text sender profile; per-operation queue and ownership validation",
+  "client_submit_enabled": true,
+  "local_path_setting": "RE_WECHAT_WEIXIN_DLL"
+}

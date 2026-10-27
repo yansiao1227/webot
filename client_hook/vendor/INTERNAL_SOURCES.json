@@ -1,0 +1,61 @@
+{
+  "description": "Internal source derivation only; origins are attribution, never runtime/build imports. External third-party dependency is vendored MinHook (see SOURCES.json).",
+  "reference_only": "aixed/WeChat-Hook consulted locally; no runtime/build dependency on that checkout",
+  "files": [
+    {
+      "path": "platform_meta.py",
+      "origin": "cli/wxcli.py metadata helpers",
+      "sha256": "7969255bcd5040b4a0333a98123a5fa8e90fb9f2d05cab64aee17a49deb9e244"
+    },
+    {
+      "path": "pe_local.py",
+      "origin": "tools/pe_trace.py PE class",
+      "sha256": "c91f1e44fadbdfc42154921b7fca96671466bf33f8e1af875f25317b468aff7b"
+    },
+    {
+      "path": "native/stream_snapshot.c",
+      "origin": "src/receive_stream/stream_snapshot.c; extended bounds and all-mode",
+      "sha256": "ddac7711f706c4571fcf407dcd5651173c693abe130823ab477e54ae3b94f77b"
+    },
+    {
+      "path": "native/stream_snapshot.h",
+      "origin": "src/receive_stream/stream_snapshot.h; extended owned body",
+      "sha256": "6de451160c5e0b00cf44b4df0ab5460c4b9d7d1623121b6ada82865c2137c141"
+    },
+    {
+      "path": "native/text_send.inc",
+      "origin": "experiments/native_send_v2/native_prepare.c; parameterized per-request operations, dynamic queue bootstrap, no old attempt gate",
+      "sha256": "d888636f430b235c547c00143f545ef0725633e77c11e9e74f7ef91fd4d8053d"
+    },
+    {
+      "path": "native/send_diagnostics.h",
+      "origin": "experiments/native_send_v2/native_protocol.h diagnostic layout",
+      "sha256": "baf3bd04bd95a6d990989100938ccd6bf506313032dbf34dfafbd8ac1884ef4d"
+    },
+    {
+      "path": "native/fixture_client.c",
+      "origin": "experiments/native_send_v2/fixture_client.c; repeated arbitrary text fixture",
+      "sha256": "d907b6be0a1f95b9299e93066ba95ff25549749e06c27716990c0cf5035c2c16"
+    },
+    {
+      "path": "native/fixture_abi.h",
+      "origin": "experiments/native_send_v2/fixture_abi.h native queue ABI",
+      "sha256": "26983f09dbe5cb0ad245d915c6840dc3cc24f7beeb59bedda7bb2d470bf51b86"
+    },
+    {
+      "path": "profiles/make_fixture_profile.py",
+      "origin": "experiments/native_send_v2/make_fixture_profile.py",
+      "sha256": "e248b2bda33c6ec3426725b4614ab140c86b1b62dac03215c2c6d09c9249de4e"
+    },
+    {
+      "path": "profiles/make_real_profile.py",
+      "origin": "experiments/native_send_v2/make_real_profile.py; uses local parser",
+      "sha256": "2f9ef3ffdaa078e778ac90ea97c64f832c717de1b5cf7088096e8d3ff3c76561"
+    },
+    {
+      "path": "profiles/weixin41930_send.h",
+      "origin": "fixed 4.1.9.30 offline profile generated from SHA256 89fc940377a779babbd64c9cd4abe6256663681d92f12802aa2df97a8db18494",
+      "sha256": "a5f8e411570b8397b5b96f14774e4b485a82b190c82d593967a4ce376a111487"
+    }
+  ]
+}
