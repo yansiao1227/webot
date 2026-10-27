@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "wechat": {
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile", "-File", "scripts/run_bridge.ps1",
+        "serve", "--transport", "stdio", "--simulate",
+        "--state-dir", "wechat_mcp/state/my-agent-simulation"
+      ]
+    }
+  }
+}
