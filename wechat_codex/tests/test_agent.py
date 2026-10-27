@@ -211,6 +211,17 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
 
 
 class Boundaries(unittest.TestCase):
+    def test_startup_generation_and_total_limits_are_validated(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'config.json'
+            for key in ('startup_timeout','generation_idle_timeout','turn_timeout'):
+                for value in (True,0,601,'30'):
+                    path.write_text(json.dumps({**CONFIG,key:value}),encoding='utf-8')
+                    with self.subTest(key=key,value=value), self.assertRaises(ValueError):
+                        read_config(temp)
+                path.write_text(json.dumps({**CONFIG,key:60}),encoding='utf-8')
+                self.assertEqual(read_config(temp)[key],60)
+
     def test_model_deadlines_are_operator_configuration_for_allowed_sessions(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'config.json'

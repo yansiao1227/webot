@@ -18,12 +18,17 @@ class DecisionClock:
         'collabAgentToolCall': '我先执行下一项处理。',
     }
 
-    def __init__(self, turn_id, decision_timeout, tool_timeout, callback=None):
+    def __init__(self, turn_id, decision_timeout, tool_timeout, callback=None, *,
+                 startup_deadline=None, generation_idle_timeout=30, total_deadline=None):
         self.loop = asyncio.get_running_loop()
         self.turn_id = turn_id
         self.decision_timeout, self.tool_timeout = decision_timeout, tool_timeout
         self.idle_deadline = self.loop.time() + decision_timeout
         self.started = self.loop.time()
+        self.startup_deadline = startup_deadline
+        self.total_deadline = total_deadline
+        self.generation_idle_timeout = generation_idle_timeout
+        self.generating = False
         self.first_decision_seconds = None
         self.tools = {}
         self.seen = set()
@@ -36,9 +41,20 @@ class DecisionClock:
         self.timeout_stage = 'decision'
 
     def deadline(self):
+        deadlines = [self.total_deadline] if self.total_deadline is not None else []
         if self.sending_deadline is not None:
-            return self.sending_deadline
-        return min(self.tools.values()) if self.tools else self.idle_deadline
+            deadlines.append(self.sending_deadline)
+        elif self.startup_deadline is not None:
+            deadlines.append(self.startup_deadline)
+        else:
+            deadlines.extend(self.tools.values() if self.tools else [self.idle_deadline])
+        return min(deadlines)
+
+    def ready(self):
+        if self.startup_deadline is not None:
+            self.startup_deadline = None
+            self.idle_deadline = self.loop.time() + self.decision_timeout
+            self.changed.set()
 
     async def publish(self, text, key, kind):
         if not self.callback:
@@ -60,8 +76,24 @@ class DecisionClock:
         method = notification.method
         item = value.get('item') or {}
         kind, item_id = item.get('type'), item.get('id')
+        # Deltas have top-level itemId/delta, not an item object. Never publish
+        # partial schema JSON, and do not deduplicate successive text chunks.
+        if method == 'item/agentMessage/delta':
+            delta = value.get('delta')
+            if value.get('itemId') and isinstance(delta, str) and delta:
+                self.ready()
+                self.generating = True
+                self.idle_deadline = self.loop.time() + self.generation_idle_timeout
+                self.changed.set()
+            return
         if not item_id:
             return
+        # External input completion marks runtime preparation complete. Older
+        # runtimes may omit it; a real model item also proves readiness.
+        if ((method == 'item/completed' and kind == 'functionCallOutput' and item.get('name') == 'wechat_message') or
+                (method in ('item/started', 'item/completed') and
+                 (kind in ('reasoning', 'agentMessage') or kind in self.TOOL_TEXT))):
+            self.ready()
         identity = (method, item_id)
         if identity in self.seen:
             return
@@ -77,10 +109,12 @@ class DecisionClock:
                 await self.publish(text, self.turn_id + ':' + item_id, 'commentary')
                 self.commentary_for_tool = True
                 self.idle_deadline = self.loop.time() + self.decision_timeout
+                self.generating = False
                 self.decision_count += 1
                 self.changed.set()
         if kind in self.TOOL_TEXT:
             if method == 'item/started':
+                self.generating = False
                 self.tool_started_count += 1
                 if self.first_decision_seconds is None:
                     self.first_decision_seconds = round(self.loop.time() - self.started, 3)
@@ -101,6 +135,7 @@ class DecisionClock:
                 self.commentary_for_tool = False
             elif method == 'item/completed':
                 self.tools.pop(item_id, None)
+                self.generating = False
                 self.idle_deadline = self.loop.time() + self.decision_timeout
                 self.changed.set()
 
@@ -109,10 +144,13 @@ class DecisionClock:
             self.changed.clear()
             changed = asyncio.create_task(self.changed.wait())
             try:
-                done, _ = await asyncio.wait({task, changed}, timeout=max(.001, self.deadline() - self.loop.time()),
-                                             return_when=asyncio.FIRST_COMPLETED)
-                if not done and self.loop.time() >= self.deadline():
-                    self.timeout_stage = 'progress_send' if self.sending_deadline is not None else 'tool' if self.tools else 'decision'
+                await asyncio.wait({task, changed}, timeout=max(.001, self.deadline() - self.loop.time()),
+                                   return_when=asyncio.FIRST_COMPLETED)
+                if not task.done() and self.loop.time() >= self.deadline():
+                    self.timeout_stage = ('total' if self.total_deadline is not None and self.loop.time() >= self.total_deadline
+                                          else 'progress_send' if self.sending_deadline is not None
+                                          else 'startup' if self.startup_deadline is not None
+                                          else 'tool' if self.tools else 'generation' if self.generating else 'decision')
                     raise TimeoutError('decision_or_tool_timeout')
             finally:
                 changed.cancel()

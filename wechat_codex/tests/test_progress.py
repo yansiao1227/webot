@@ -35,7 +35,7 @@ class ProgressTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(callback.await_count,1)
         self.assertIn('search',clock.tools)
 
-    async def test_raw_reasoning_and_deltas_do_not_reset_decision_deadline(self):
+    async def test_raw_reasoning_and_malformed_deltas_do_not_reset_decision_deadline(self):
         callback=AsyncMock()
         clock=DecisionClock('turn',.03,.2,callback)
         original=clock.idle_deadline
@@ -104,3 +104,81 @@ class ProgressTests(unittest.IsolatedAsyncioTestCase):
         clock=DecisionClock('turn',1,1,AsyncMock(side_effect=ProgressDeliveryError('unknown')))
         with self.assertRaises(ProgressDeliveryError):
             await clock.observe(notification('item/started','webSearch','search'))
+
+    async def test_streaming_text_outlasts_decision_budget_without_publishing_json(self):
+        callback=AsyncMock()
+        clock=DecisionClock('turn',.03,.3,callback,generation_idle_timeout=.08)
+        async def run():
+            for _ in range(8):
+                await clock.observe(SimpleNamespace(method='item/agentMessage/delta',
+                    payload={'turnId':'turn','itemId':'answer','delta':'{"reply":'}))
+                await asyncio.sleep(.015)
+            return 'final'
+        self.assertEqual(await clock.wait(asyncio.create_task(run())),'final')
+        callback.assert_not_awaited()
+
+    async def test_streaming_stall_and_total_limit_are_bounded(self):
+        for total, stage in ((None,'generation'),(.07,'total')):
+            with self.subTest(stage=stage):
+                loop=asyncio.get_running_loop()
+                clock=DecisionClock('turn',.03,.3,generation_idle_timeout=.04,
+                    total_deadline=loop.time()+total if total else None)
+                async def run():
+                    while True:
+                        await clock.observe(SimpleNamespace(method='item/agentMessage/delta',
+                            payload={'turnId':'turn','itemId':'answer','delta':'x'}))
+                        await asyncio.sleep(.01 if total else .2)
+                task=asyncio.create_task(run())
+                try:
+                    with self.assertRaises(TimeoutError):await clock.wait(task)
+                    self.assertEqual(clock.timeout_stage,stage)
+                finally:
+                    task.cancel();await asyncio.gather(task,return_exceptions=True)
+
+    async def test_startup_is_separate_and_readiness_only_resets_once(self):
+        loop=asyncio.get_running_loop()
+        clock=DecisionClock('turn',.04,.3,startup_deadline=loop.time()+.2)
+        async def run():
+            await asyncio.sleep(.07)
+            await clock.observe(notification('item/completed','functionCallOutput','input',name='wechat_message'))
+            deadline=clock.idle_deadline
+            await asyncio.sleep(.01)
+            await clock.observe(notification('item/started','reasoning','reasoning'))
+            self.assertEqual(clock.idle_deadline,deadline)
+            await asyncio.sleep(.01)
+            return 'final'
+        self.assertEqual(await clock.wait(asyncio.create_task(run())),'final')
+
+    async def test_startup_timeout_and_foreign_or_empty_deltas(self):
+        loop=asyncio.get_running_loop()
+        clock=DecisionClock('turn',.2,.3,startup_deadline=loop.time()+.03)
+        original=clock.deadline()
+        for turn,delta in (('other','x'),('turn','')):
+            await clock.observe(SimpleNamespace(method='item/agentMessage/delta',
+                payload={'turnId':turn,'itemId':'answer','delta':delta}))
+        self.assertEqual(clock.deadline(),original)
+        task=asyncio.create_task(asyncio.sleep(.3))
+        try:
+            with self.assertRaises(TimeoutError):await clock.wait(task)
+            self.assertEqual(clock.timeout_stage,'startup')
+        finally:
+            task.cancel();await asyncio.gather(task,return_exceptions=True)
+
+    async def test_text_deltas_cannot_extend_active_tool_or_total_budget(self):
+        for total, stage in ((None,'tool'),(.03,'total')):
+            with self.subTest(stage=stage):
+                loop=asyncio.get_running_loop()
+                clock=DecisionClock('turn',.2,.06,generation_idle_timeout=.2,
+                    total_deadline=loop.time()+total if total else None)
+                async def run():
+                    await clock.observe(notification('item/started','webSearch','search'))
+                    while True:
+                        await clock.observe(SimpleNamespace(method='item/agentMessage/delta',
+                            payload={'turnId':'turn','itemId':'answer','delta':'x'}))
+                        await asyncio.sleep(.01)
+                task=asyncio.create_task(run())
+                try:
+                    with self.assertRaises(TimeoutError):await clock.wait(task)
+                    self.assertEqual(clock.timeout_stage,stage)
+                finally:
+                    task.cancel();await asyncio.gather(task,return_exceptions=True)

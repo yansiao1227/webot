@@ -62,6 +62,8 @@ async def process(agent,job):
     async def generate(tid, event):
         event['_decision_timeout']=agent.config.get('decision_timeout',agent.config.get('text_model_timeout',30))
         event['_tool_timeout']=agent.config.get('tool_timeout',agent.config.get('model_timeout',180))
+        for key, default in (('startup_timeout',60),('generation_idle_timeout',30),('turn_timeout',600)):
+            event['_'+key]=agent.config.get(key,default)
         method=getattr(agent.backend,'generate_with_progress',None)
         async def call(current):
             if callable(method):return await method(tid,current,progress)
@@ -154,9 +156,14 @@ async def process(agent,job):
                     generation={'error':'progress_stopped','continue_reply':False,'context_mode':'none'}
                 except TimeoutError as error:
                     stage=getattr(error,'timeout_stage','decision')
+                    if stage=='startup' and getattr(error,'interruption_confirmed',False) is False:
+                        store.update(eid,'generation_unknown',error='模型启动超时，轮次状态待核查，禁止自动重跑')
+                        return
                     if details.get('progress_pending') is not None:
                         store.update(eid,'unknown',result=details,error='进度发送超时或结果未确认，禁止改写原段或跳段');return
-                    reply=('工具执行等待超时' if stage=='tool' else '等待下一执行决定超时')+'，本轮已停止；已发出的内容保留，不会自动重跑。'
+                    labels={'tool':'工具执行等待超时','startup':'模型启动等待超时',
+                            'generation':'正文生成停滞超时','total':'本轮处理达到总时限'}
+                    reply=labels.get(stage,'等待下一执行决定超时')+'，本轮已停止；已发出的内容保留，不会自动重跑。'
                     generation={'error':'model_timeout','turn_id':getattr(error,'turn_id',None),
                         'timeout_stage':stage,
                         'interruption_confirmed':getattr(error,'interruption_confirmed',False),

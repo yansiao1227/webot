@@ -65,7 +65,8 @@ def read_config(directory):
         raise ValueError('配置不完整或并发数超限')
     limits = config.get('model_timeouts', {})
     text_limit = config.get('text_model_timeout', 30)
-    for key, default in (('decision_timeout',30),('tool_timeout',180)):
+    for key, default in (('decision_timeout',30),('tool_timeout',180),('startup_timeout',60),
+                         ('generation_idle_timeout',30),('turn_timeout',600)):
         value=config.get(key,default)
         if isinstance(value,bool) or not isinstance(value,(int,float)) or not .05<=value<=600:
             raise ValueError(key+' 必须为0.05至600秒')

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 from local_agent.storage import Store
 from local_agent.runtime import identity
 from local_agent.service import Agent
-from local_agent.codex_backend import ModelUnavailable
+from local_agent.codex_backend import ModelUnavailable, ModelTimeout
 from fakes import CONFIG,ACCOUNT,event,FakeBackend,FakeMCP
 
 class AdaptiveBackend(FakeBackend):
@@ -17,6 +17,15 @@ class AdaptiveTests(unittest.IsolatedAsyncioTestCase):
         self.temp=tempfile.TemporaryDirectory();self.store=Store(self.temp.name,identity(CONFIG))
         self.backend=AdaptiveBackend();self.mcp=FakeMCP();self.agent=Agent(self.store,self.mcp,self.backend,CONFIG)
     async def asyncTearDown(self):self.store.close();self.temp.cleanup()
+
+    async def test_uncertain_startup_never_retries_or_sends_completion(self):
+        self.store.ingest([event('startup-unknown')])
+        self.backend.generate=AsyncMock(side_effect=ModelTimeout('thread',None,False,'startup'))
+        await self.agent.process(self.store.ready()[0])
+        self.assertEqual(self.store.status()['jobs'],{'generation_unknown':1})
+        self.assertTrue(self.store.conversation('wxid_test_peer')['paused'])
+        self.assertEqual(self.mcp.sent,[])
+        self.backend.generate.assert_awaited_once()
 
     async def test_card_source_intent_and_profile_reach_preparer(self):
         value=event('card-request',text='分析引用链接正文')
@@ -68,6 +77,9 @@ class AdaptiveTests(unittest.IsolatedAsyncioTestCase):
         async def stream(tid, request, callback):
             self.assertEqual(request['_decision_timeout'],30)
             self.assertEqual(request['_tool_timeout'],180)
+            self.assertEqual(request['_startup_timeout'],60)
+            self.assertEqual(request['_generation_idle_timeout'],30)
+            self.assertEqual(request['_turn_timeout'],600)
             await callback('我先联网搜索。',{'key':'turn:decision','kind':'commentary'})
             self.assertEqual(len(self.mcp.sent),1)
             self.assertFalse(self.mcp.sent[0]['final'])

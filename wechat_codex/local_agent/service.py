@@ -71,6 +71,8 @@ class Agent:
         event = json.loads(job['event'])
         # Operator configuration only. Message text cannot change deadlines.
         event.pop('_model_timeout', None)
+        for key, default in (('startup_timeout',60),('generation_idle_timeout',30),('turn_timeout',600)):
+            event['_'+key] = self.config.get(key,default)
         if event['conversation_id'] in self.config.get('model_timeouts', {}):
             event['_model_timeout'] = self.config['model_timeouts'][event['conversation_id']]
         try:
@@ -141,6 +143,10 @@ class Agent:
                     reply=error.reply
                     generation=error.details()
                 except TimeoutError as error:
+                    if (getattr(error,'timeout_stage',None)=='startup' and
+                            getattr(error,'interruption_confirmed',False) is False):
+                        self.store.update(eid,'generation_unknown',error='模型启动超时，轮次状态待核查，禁止自动重跑')
+                        return
                     reply = '这次处理超时，未能完成。不会自动重跑；请稍后重试，需要处理引用的内容时请重新引用目标并说明要求。'
                     generation = {'thread_id':thread_id, 'turn_id':getattr(error,'turn_id',None),
                                   'error':'model_timeout', 'read_attachment':False,

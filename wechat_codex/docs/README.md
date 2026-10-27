@@ -77,7 +77,7 @@ SDK 版本由 `requirements.txt` 固定。语音识别使用本机 CPU 和预先
 
 ## 上下文与内容处理
 
-默认启用按需上下文和处理时原生已读。`decision_timeout=30` 限制等待下一决定或答复的时间，`tool_timeout=180` 单独限制工具执行时间；这些值不是对端收件时限。
+默认启用按需上下文和处理时原生已读。`startup_timeout=60` 单独限制模型启动准备，准备完成后由 `decision_timeout=30` 限制等待下一决定或首次输出的时间。正文流式输出期间按 `generation_idle_timeout=30` 判断停滞，`tool_timeout=180` 单独限制工具执行，`turn_timeout=600` 限制单轮总时长；配置方法见[计时与分段规则](ADAPTIVE_REPLIES.md)。这些值不是对端收件时限。
 
 视频使用采样画面与有限音轨转写；文档覆盖文本、PDF、DOCX、XLSX。网页或字幕读取失败时应如实说明，不能把卡片字段当作完整来源内容。
 

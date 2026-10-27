@@ -143,6 +143,64 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(info['first_decision_seconds'])
         self.thread.run.assert_not_awaited()
 
+    async def test_runtime_preparation_does_not_consume_response_budget(self):
+        await self.backend.ensure_thread('peer')
+        async def start(*args,**kwargs):
+            await asyncio.sleep(.04)
+            return self.handle
+        self.thread.turn.side_effect=start
+        async def notifications():
+            await asyncio.sleep(.04)
+            yield SimpleNamespace(method='item/completed',payload={'turnId':'turn-1',
+                'item':{'id':'input','type':'functionCallOutput','name':'wechat_message'}})
+            await asyncio.sleep(.015)
+            for _ in range(5):
+                yield SimpleNamespace(method='item/agentMessage/delta',payload={'turnId':'turn-1',
+                    'itemId':'answer','delta':'x'})
+                await asyncio.sleep(.015)
+        self.handle.stream=notifications
+        async def collect(stream,turn_id):
+            async for _ in stream:pass
+            return SimpleNamespace(status='completed',id=turn_id,duration_ms=100,items=[],
+                final_response=json.dumps({'reply':'完整答案'}))
+        callback=AsyncMock()
+        with patch.dict(sys.modules,{'openai_codex._run':SimpleNamespace(_collect_async_turn_result=collect)}):
+            reply,_=await self.backend.generate_with_progress('thread-1',
+                {**event(),'_decision_timeout':.03,'_startup_timeout':.2,'_generation_idle_timeout':.06},callback)
+        self.assertEqual(reply,'完整答案')
+        callback.assert_not_awaited()
+        self.handle.interrupt.assert_not_awaited()
+
+    async def test_startup_timeout_interrupts_known_turn(self):
+        await self.backend.ensure_thread('peer')
+        stopped=asyncio.Event()
+        async def notifications():
+            await stopped.wait()
+            if False:yield None
+        self.handle.stream=notifications
+        self.handle.interrupt.side_effect=lambda:stopped.set()
+        async def collect(stream,turn_id):
+            async for _ in stream:pass
+            return SimpleNamespace(status='interrupted')
+        with patch.dict(sys.modules,{'openai_codex._run':SimpleNamespace(_collect_async_turn_result=collect)}):
+            with self.assertRaises(ModelTimeout) as caught:
+                await self.backend.generate('thread-1',{**event(),'_startup_timeout':.03})
+        self.assertEqual(caught.exception.timeout_stage,'startup')
+        self.assertTrue(caught.exception.interruption_confirmed)
+        self.handle.interrupt.assert_awaited_once()
+
+    async def test_start_rpc_timeout_preserves_uncertainty_without_retry(self):
+        await self.backend.ensure_thread('peer')
+        async def start(*args,**kwargs):await asyncio.sleep(.3)
+        self.thread.turn.side_effect=start
+        with self.assertRaises(ModelTimeout) as caught:
+            await self.backend.generate('thread-1',{**event(),'_startup_timeout':.03})
+        self.assertEqual(caught.exception.timeout_stage,'startup')
+        self.assertFalse(caught.exception.interruption_confirmed)
+        self.assertIsNone(caught.exception.turn_id)
+        self.thread.turn.assert_awaited_once()
+        self.handle.interrupt.assert_not_awaited()
+
     async def test_unknown_progress_interrupts_the_exact_live_turn(self):
         await self.backend.ensure_thread('peer')
         async def notifications():
