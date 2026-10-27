@@ -1,4 +1,4 @@
-"""Real profile/captions/model validation of one explicit URL; never sends WeChat."""
+"""针对单个显式 URL 验证真实浏览器配置、字幕及模型，不发送微信。"""
 import argparse
 import asyncio
 import json
@@ -53,6 +53,6 @@ if __name__ == '__main__':
     try:
         asyncio.run(main(parser.parse_args().url))
     except Exception as error:
-        # Playwright exceptions can contain authenticated request headers.
+        # Playwright 异常可能包含已认证请求的请求头。
         print(json.dumps({'error': type(error).__name__, 'message': '验证未完成，凭据与底层请求日志不输出'}, ensure_ascii=False))
         raise SystemExit(1)

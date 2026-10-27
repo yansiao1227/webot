@@ -36,7 +36,7 @@ class NativeApiTests(unittest.TestCase):
                 'serve', '--fixture-pid', str(host.pid), '--port', str(port), '--state-dir', temp.name],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
             self.assertEqual(json.loads(controller.stdout.readline())['type'], 'http_ready')
-            controller.kill()  # Our API fixture process, never the user's client.
+            controller.kill()  # 这是自有 API 测试桩进程，绝不终止用户的客户端。
             controller.wait(timeout=5)
             until = time.monotonic() + 5
             while inspect_status(SimpleNamespace(fixture_pid=host.pid))['state'] != 'idle':
@@ -108,8 +108,8 @@ class NativeApiTests(unittest.TestCase):
                         self.assertEqual(item['mentions']['state'], 'unknown')
                         self.assertTrue(item['payload']['text'])
                     client.ack('native', batch['ack_token'])
-            # Fixture rotates at 256 KiB; live uses 8 MiB. Controller follows
-            # the same protocol without accumulating an unbounded raw file.
+            # 测试桩按 256 KiB 轮转，真实服务按 8 MiB 轮转；控制器使用
+            # 同一协议，不累积无界的原始文件。
             for _ in range(6):
                 host.stdin.write('emit-long\n'); host.stdin.flush()
                 self.assertEqual(json.loads(host.stdout.readline())['type'], 'emitted')

@@ -1,4 +1,4 @@
-"""Real SDK streamed decisions + simulated MCP sends; never sends to WeChat."""
+"""真实 SDK 流式执行决定与模拟 MCP 发送验证，不向微信发送消息。"""
 import asyncio
 import json
 from pathlib import Path

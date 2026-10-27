@@ -1,4 +1,4 @@
-"""Operator-only real send/echo observer. No generation, sending or DB access."""
+"""仅供操作员观察真实发送与回显，不生成、不发送，也不访问数据库。"""
 import asyncio
 import hashlib
 import json
@@ -59,8 +59,8 @@ async def main():
             replies[event['probe']]=await bridge.call('get_reply_status',event_id=event['event_id'])
         except MCPError:
             replies[event['probe']]={'state':'no_reply_intent'}
-    # The provider counts only exact native DB create_time results. Raw +134
-    # is not creation time and cannot substantiate history filtering.
+    # 提供方仅统计由精确原生数据库查询得到的 create_time；原始 +134
+    # 不是创建时间，不能作为历史消息过滤的依据。
     counters=capture.get('history_filter',{})
     old_persisted=[v['event_id'] for v in report['events'].values() if v.get('direction')=='outgoing'
                    and v.get('native_created_at',minimum)<minimum]

@@ -49,7 +49,7 @@ def main(argv=None):
                 parser.error('端口、保留期限与容量必须为正数且有效')
             if args.simulate and (args.pid or args.fixture_pid):
                 parser.error('simulate 不能指定目标进程')
-            # Validate listener before any target mutation.
+            # 在修改目标前校验监听配置。
             import ipaddress
             from urllib.parse import urlsplit
             local = args.host == 'localhost'
@@ -83,7 +83,7 @@ def main(argv=None):
             except KeyboardInterrupt:
                 pass
             finally:
-                # Wake HTTP long-polls before waiting for request threads.
+                # 等待请求线程结束前，先唤醒 HTTP 长轮询。
                 app.store.capture('stopped', account=backend.account, reason='service_shutdown')
                 if server:
                     server.server_close()

@@ -1,4 +1,4 @@
-"""Shared local ffmpeg execution helpers."""
+"""共享的本地 ffmpeg 执行辅助工具。"""
 import subprocess
 
 

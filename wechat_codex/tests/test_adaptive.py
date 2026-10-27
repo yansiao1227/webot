@@ -101,10 +101,10 @@ class AdaptiveTests(unittest.IsolatedAsyncioTestCase):
             await callback('我先联网搜索。',{'key':'turn:decision','kind':'commentary'})
             self.assertEqual(len(self.mcp.sent),1)
             self.assertFalse(self.mcp.sent[0]['final'])
-            # Duplicate SDK notification must not create a second send.
+            # 重复 SDK 通知不得产生第二次发送。
             await callback('我先联网搜索。',{'key':'turn:decision','kind':'commentary'})
             self.assertEqual(len(self.mcp.sent),1)
-            # Distinct search calls with the same wording are also suppressed.
+            # 文案相同的不同搜索调用也会抑制重复提示。
             await callback('我先联网搜索。',{'key':'turn:search-2','kind':'tool_decision'})
             await callback(' 我先联网搜索。 ',{'key':'turn:search-3','kind':'tool_decision'})
             self.assertEqual(len(self.mcp.sent),1)
@@ -144,7 +144,7 @@ class AdaptiveTests(unittest.IsolatedAsyncioTestCase):
             await callback('B',{'key':'b','kind':'commentary'})
             await callback('B',{'key':'duplicate-b','kind':'commentary'})
             await callback('A',{'key':'back-to-a','kind':'commentary'})
-            # Replaying the same SDK event stays idempotent even after other text.
+            # 即使中间发送过其他文本，重放同一 SDK 事件仍须保持幂等。
             await callback('A',{'key':'old-a','kind':'commentary'})
             return '最终结论',{}
         self.backend.generate_with_progress=stream

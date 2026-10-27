@@ -1,4 +1,4 @@
-"""Build a pinned owner-queue download sidecar; never load it as part of build."""
+"""构建固定版本、通过所属队列下载的旁路模块，构建过程不加载模块。"""
 
 from pathlib import Path
 import sys

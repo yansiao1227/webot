@@ -104,7 +104,7 @@ static void work_resource(Operation *operation) {
     BOOL constructed=FALSE, consumed=FALSE, started=FALSE, clean=TRUE;
     rpc->error=ERROR_INVALID_DATA; rpc->callback_tid=GetCurrentThreadId(); rpc->stage=1;
     if (!resource_profile_matches()) goto done;
-    /* Same readonly template + native constructor sequence as ImageTask/FileTask. */
+    /* 使用与 ImageTask/FileTask 相同的只读模板及原生构造顺序。 */
     memcpy(request,(const void *)(active_base+0x80938a8),sizeof(request));
     ctor(request); constructed=TRUE; rpc->stage=2;
     if (!resource_string(request,0x50,rpc->request_id) ||
@@ -113,8 +113,8 @@ static void work_resource(Operation *operation) {
         !resource_string(request,0xb0,rpc->output)) goto done;
     memcpy(request+0xd0,&rpc->file_type,4);
     memcpy(request+0x198,&rpc->expected_size,8);
-    /* Follow the explicit FileTask/VideoTask request defaults. "autostart"
-       describes the automatic policy, not an instruction to bypass that policy. */
+    /* 沿用显式 FileTask/VideoTask 请求的默认值。autostart
+     * 描述自动策略，不表示可以绕过该策略。 */
     request[0x329]=0;
     uint32_t connections=2;
     memcpy(request+0x170,&connections,4);
@@ -138,8 +138,8 @@ static void work_resource(Operation *operation) {
     rpc->error=0; rpc->stage=5;
 done:
     if (constructed && !consumed) dtor(request);
-    /* Preserve the future until its terminal value has been read by status RPC.
-       The native downloader may still be executing after submit returns. */
+    /* 保留 future，直到状态 RPC 读取其终态值。
+     * 提交返回后，原生下载器可能仍在执行。 */
     if (future.control || future.object) job->future=future;
     for (int i=2;i>=0;--i) {
         if (started || consumed) job->contexts[i]=refs[i];
@@ -193,7 +193,7 @@ __declspec(dllexport) DWORD WINAPI HookResource(void *argument) {
         job->next=resource_operations;resource_operations=job;
         post_once((uintptr_t)module,&real_profile,&job->queue);
     }
-    /* Returning unknown/pending never means the task may be submitted again. */
+    /* 返回 unknown/pending 绝不表示可以再次提交任务。 */
     error=atomic_read(&job->queue.done)?job->rpc.error:ERROR_IO_PENDING;
     if (atomic_read(&job->queue.failure)) error=(DWORD)atomic_read(&job->queue.failure);
     if (atomic_read(&job->queue.done) && job->future.object && !job->rpc.native_done) {
@@ -208,9 +208,9 @@ __declspec(dllexport) DWORD WINAPI HookResource(void *argument) {
             if (!read_self((BYTE *)job->future.object+0xb8,&value,8) || !value ||
                 !read_self((void *)(value+8),status,8)) {error=ERROR_INVALID_DATA;goto leave;}
             job->rpc.native_status_0=status[0]; job->rpc.native_status_1=status[1];
-            /* Result<DownloadResult>: first status belongs to the outer Result.
-               ImageTask reads the actual CDN status from result.payload (+0x28)
-               rather than treating the outer status as download success. */
+            /* Result<DownloadResult> 的第一个状态属于外层 Result。
+             * ImageTask 从 result.payload（+0x28）读取实际 CDN 状态，
+             * 不能将外层状态当作下载成功。 */
             if (!status[0] && !status[1]) {
                 if (!read_self((void *)(value+0x30),&payload,16) || !payload.object || !payload.control ||
                     !read_self(payload.object,status,8)) {error=ERROR_INVALID_DATA;goto leave;}

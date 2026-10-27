@@ -1,4 +1,4 @@
-"""Bounded local media and document preparation for any agent."""
+"""为任意代理提供有界的本地媒体和文档预处理。"""
 import base64
 import importlib.util
 from pathlib import Path
@@ -47,7 +47,7 @@ def _audio(path, output, model_dir=None):
 
 
 def _video(path, output, model_dir=None):
-    # ffmpeg supplies both the metadata probe and frame decoder, no global PATH dependency.
+    # ffmpeg 同时负责元数据探测和画面解码，不依赖全局 PATH。
     probe = subprocess.run([_ffmpeg(), '-nostdin', '-i', str(path)], stdin=subprocess.DEVNULL,
                            capture_output=True, timeout=15, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     info = probe.stderr.decode('utf-8', errors='replace')
@@ -89,7 +89,7 @@ def _document(path, name, output=None):
             if output is None:
                 raise ValueError('扫描PDF需要视觉处理输出目录')
             import pypdfium2 as pdfium
-            # PDFium does not permit concurrent calls from worker threads.
+            # PDFium 不允许工作线程并发调用。
             with _pdf_lock:
                 document = pdfium.PdfDocument(str(path))
                 try:
@@ -157,7 +157,7 @@ def _document(path, name, output=None):
 
 
 def prepare_content(path, kind, *, name=None, output_dir=None, model_dir=None):
-    """Read a local file. Output contains extracted evidence, not model interpretation."""
+    """读取本地文件，输出提取出的证据，不包含模型解读。"""
     try:
         path = Path(path).resolve(strict=True)
         if not path.is_file():
@@ -184,7 +184,7 @@ def prepare_content(path, kind, *, name=None, output_dir=None, model_dir=None):
 
 
 def external_content(text, attachment=None):
-    """Responses function-output content retains ExternalMessage authority."""
+    """Responses 函数输出内容保留 ExternalMessage 的权限级别。"""
     if not attachment or not attachment.get('prepared'):
         return text
     content = [{'type': 'input_text', 'text': text}]

@@ -1,4 +1,4 @@
-"""Durable inbox, per-conversation thread mapping and conservative recovery."""
+"""持久收件箱、按会话映射线程，以及保守恢复。"""
 from contextlib import contextmanager
 import json
 import hashlib
@@ -37,7 +37,7 @@ class Store:
             self.db.close()
             raise ValueError('状态目录账号、MCP或consumer身份不匹配')
         self.db.execute("INSERT OR IGNORE INTO meta VALUES('identity',?)", (encoded,))
-        # Migrate old jobs without replacing threads or replaying model turns.
+        # 迁移旧任务，不替换线程或重放模型轮次。
         for row in self.db.execute('SELECT event_id,conversation,event,created FROM jobs ORDER BY seq').fetchall():
             self.db.execute('INSERT OR IGNORE INTO messages(event_id,conversation,event,created) VALUES(?,?,?,?)', tuple(row))
             self.db.execute('INSERT OR IGNORE INTO seen_events VALUES(?,?)',
@@ -94,8 +94,8 @@ class Store:
         after = progress['through_seq'] if progress and progress['epoch'] == conversation['epoch'] else 0
         rows = self.db.execute('SELECT seq,event FROM messages WHERE conversation=? AND seq>? AND seq<=? ORDER BY seq',
                                (row['conversation'], after, row['seq'])).fetchall()
-        # Generated replies already live in this thread. Suppress only echoes
-        # carrying the same verified native identity, never equal body text.
+        # 已生成回复已保存在此线程中，仅抑制携带
+        # 同一可信原生标识的回显，不能根据相同正文判断。
         own_ids = set()
         for job in self.db.execute('''SELECT j.result FROM jobs j JOIN messages m ON m.event_id=j.event_id
                 WHERE j.conversation=? AND m.seq<? AND j.result IS NOT NULL''', (row['conversation'], row['seq'])):
@@ -129,13 +129,13 @@ class Store:
             key = outgoing_id(event)
             if key and (key in own_ids or key in prior_ids or latest[key] != item['seq']):
                 continue
-            # Raw XML, content, URLs and file paths are never injected as attachment metadata.
+            # 附件元数据中不注入原始 XML、正文、URL 或文件路径。
             value = {k: event[k] for k in ('event_id', 'sender_id', 'message_id', 'direction', 'message_type', 'captured_at') if k in event}
             payload = event['payload']
             value['payload'] = ({'text': payload['text']} if event['message_type'] == 'text' else
                                 {k: payload[k] for k in ('name', 'mime', 'size') if k in payload})
             values.append(value)
-        # Do not silently discard background messages. An oversized batch is explicit.
+        # 不得静默丢弃背景消息；批次超限时显式报错。
         if len(json.dumps(values, ensure_ascii=False).encode()) > 512 * 1024:
             raise ValueError('待补入上下文超过512KiB，需要显式整理会话后恢复')
         return {'messages': values, 'through_seq': row['seq'], 'epoch': conversation['epoch']}
@@ -147,14 +147,14 @@ class Store:
     def prune(self, now=None):
         cutoff = (time.time() if now is None else now) - 7 * 86400
         with self.tx() as db:
-            # Preserve whole conversations with unfinished/uncertain work until resolved.
+            # 会话存在未完成或状态未知的工作时，保留整个会话直到解决。
             db.execute('''DELETE FROM messages WHERE created<? AND NOT EXISTS
                 (SELECT 1 FROM jobs WHERE conversation=messages.conversation AND state!='accepted')''', (cutoff,))
             db.execute("DELETE FROM jobs WHERE state='accepted' AND created<?", (cutoff,))
 
     def recover(self):
-        # An interrupted model turn may already have appended to its thread.
-        # Do not generate a second answer or continue that conversation blindly.
+        # 被中断的模型轮次可能已向线程追加内容。
+        # 不得生成第二个回答或盲目继续该会话。
         with self.tx() as db:
             db.execute("UPDATE jobs SET state='generation_unknown',error='进程中断，模型轮次结果待核查',updated=? WHERE state='generating'", (time.time(),))
             db.execute("UPDATE conversations SET paused=1 WHERE EXISTS (SELECT 1 FROM jobs WHERE conversation=conversations.id AND epoch=conversations.epoch AND state IN ('generation_unknown','unknown','failed'))")

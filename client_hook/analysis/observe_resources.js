@@ -1,4 +1,4 @@
-// Fixed-build, read-only parameter observation. No native function invocation.
+// 固定版本的只读参数观察，不调用原生函数。
 const core = Process.getModuleByName('Weixin.dll');
 const base = core.base;
 const account = 'wxid_x9enzopa4clm12';

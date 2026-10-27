@@ -73,7 +73,7 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
         value = event('attachment')
         value['reference'] = {'message_id':'native-id'}
         await self.next_job(value)
-        self.assertIsNone(captured[-1])  # Backend retains its longer attachment limit.
+        self.assertIsNone(captured[-1])  # 后端保留较长的附件处理时限。
 
     async def test_generated_crash_recovers_without_model_regeneration(self):
         self.store.ingest([event()]); self.store.update('1', 'generated', reply='原回复')

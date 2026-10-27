@@ -1,4 +1,4 @@
-"""Observe real read operations via MCP only; never mark/read/send on its own."""
+"""仅通过 MCP 观察真实已读操作，自身不标记已读、不读取或发送消息。"""
 import asyncio
 import json
 from pathlib import Path

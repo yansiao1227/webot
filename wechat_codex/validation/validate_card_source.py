@@ -1,4 +1,4 @@
-"""Read-only real MCP/SDK validation of an already authorized reference; never sends."""
+"""对已有授权引用进行真实 MCP/SDK 只读验证，从不发送消息。"""
 import argparse
 import asyncio
 import hashlib

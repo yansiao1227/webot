@@ -1,4 +1,4 @@
-"""Owned attachment files; only a trusted backend can materialize bytes."""
+"""自有附件文件，仅可信后端可以生成实际字节。"""
 import base64
 import hashlib
 import threading

@@ -1,4 +1,4 @@
-"""URL syntax and optional public-source policy."""
+"""URL 语法与可选的公开来源策略。"""
 import ipaddress
 from urllib.parse import urlsplit
 

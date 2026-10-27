@@ -1,4 +1,4 @@
-"""Real SDK timeout/interrupt/recovery check. No WeChat transport or sends."""
+"""真实 SDK 超时、中断和恢复检查，不使用微信传输或发送消息。"""
 import asyncio
 import json
 from pathlib import Path

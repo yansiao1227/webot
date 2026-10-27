@@ -1,4 +1,4 @@
-"""Synthetic video + public page through real SDK; never connects to WeChat."""
+"""通过真实 SDK 处理合成视频和公开页面，不连接微信。"""
 import asyncio
 import json
 from pathlib import Path

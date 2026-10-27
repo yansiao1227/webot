@@ -1,4 +1,4 @@
-"""Read only the pinned account object's image-key field; never scan memory."""
+"""仅读取固定账号对象的图像密钥字段，不扫描内存。"""
 import struct
 import time
 
@@ -38,7 +38,7 @@ def current_image_key(account, pid=None, full=False):
             return value
         if string(obj + 0x48).decode('ascii') != account:
             raise ValueError('identity')
-        # 0x303f80 copies account+0x278 and XORs this exact 32-byte mask.
+        # 0x303f80 复制 account+0x278，并与此精确的 32 字节掩码进行 XOR 运算。
         encoded = string(obj + 0x278)
         if len(encoded) not in (16, 32):
             raise ValueError('key length')

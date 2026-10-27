@@ -15,7 +15,7 @@ typedef struct {
     volatile LONG dropped;
 } HookQueue;
 void hook_queue_init(HookQueue *queue);
-/* Copies owned POD; never retains a pointer into the caller's record. */
+/* 复制自有 POD 数据，不保留指向调用方记录的指针。 */
 BOOL hook_queue_push(HookQueue *queue, const HookRecord *record);
 BOOL hook_queue_pop(HookQueue *queue, HookRecord *record);
 #endif

@@ -1,4 +1,4 @@
-"""Fixed native read wrapper RPC; never unload, never retry an unknown submission."""
+"""固定版本原生已读封装 RPC；不卸载模块，不重试提交状态未知的操作。"""
 import ctypes as C
 from ctypes import wintypes as W
 import hashlib

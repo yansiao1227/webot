@@ -1,4 +1,4 @@
-"""Question-scoped generation and durable ordered reply parts."""
+"""以问题为范围生成，并持久保存有序回复段。"""
 import asyncio
 import json
 import time
@@ -21,8 +21,8 @@ async def process(agent,job):
             raise ProgressDeliveryError('服务停止，暂停进度发送')
         text = text.strip()
         key = metadata['key']
-        # Event identity remains idempotent. Wording only compares with the last
-        # accepted message, including messages persisted before a safe resume.
+        # 事件标识保持幂等，文案仅与最后一条已接受消息比较，
+        # 包括安全恢复前已经持久保存的消息。
         if any(p.get('state') == 'accepted' and p.get('progress_key') == key for p in parts):
             return
         previous = next((p for p in reversed(parts) if p.get('state') == 'accepted'), None)
@@ -49,7 +49,7 @@ async def process(agent,job):
             store.update(eid,'unknown',result={'progress_pending':pending},
                          error='进度发送观察被中断，原段需核查，禁止重发')
             raise ProgressDeliveryError('进度发送观察未确认') from None
-        # A queued/unknown progress message cannot be skipped while the model keeps running.
+        # 模型继续运行时，不得跳过排队中或状态未知的进度消息。
         if operation.get('state')!='accepted':
             store.update(eid,'unknown',result={'progress_pending':{**pending,'operation':operation}},
                          error='进度发送未确认成功，已停止模型，禁止重发或跳段')
@@ -87,8 +87,8 @@ async def process(agent,job):
                     event['reference_target']['payload']={k:target['payload'][k] for k in ('text','name','mime','size') if k in target['payload']}
                 except MCPError:event['reference_error']='无法精确找到原生引用目标，请重新引用，不能猜测附近附件'
             conversation=store.conversation(job['conversation'])
-            # Preserve the existing logical conversation thread mapping. It is
-            # no longer the automatically included model history of each question.
+            # 保留现有逻辑会话与线程的映射；它已不再
+            # 作为每个问题自动包含的模型历史。
             if not conversation['thread_id']:
                 owner=await agent.backend.ensure_thread(job['conversation'])
                 store.set_thread(job['conversation'],owner)

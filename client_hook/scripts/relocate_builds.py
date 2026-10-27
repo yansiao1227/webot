@@ -45,7 +45,7 @@ def relocation_plan(root):
 
 
 def relocate(root, apply=False):
-    # Validate every selected build before changing any manifest.
+    # 修改任何清单前，先校验所有选中的构建。
     changes = relocation_plan(root)
     if apply and changes:
         suffix = '.before-relocation-' + uuid.uuid4().hex + '.json'

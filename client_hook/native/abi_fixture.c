@@ -1,4 +1,4 @@
-/* All memory and functions below belong to this test executable. */
+/* 以下全部内存和函数均属于此测试可执行文件。 */
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
@@ -22,7 +22,7 @@ void fixture_finalize_body(Wx41930Record *record, uint8_t force) {
     ++calls;
     observed_force = force;
     observed_record = record;
-    /* Simulate the native fast path and the force-refresh branch. */
+    /* 模拟原生快速路径和强制刷新分支。 */
     if (force || !record->parsed_flag) {
         record->cached_118 = record->raw_kind;
         record->parsed_flag = 1;
@@ -43,7 +43,7 @@ static void detour(Wx41930Record *record, uint8_t force) {
         else if (rc < 0) ++rejected;
         else ++filtered;
     } else ++filtered;
-    original(record, force); /* Preserve the full byte, including 0x81. */
+    original(record, force); /* 保留完整字节，包括 0x81。 */
 }
 
 static void set_string(Wx41930String *out, const char *text) {
@@ -73,7 +73,7 @@ int main(void) {
     BOOL created = FALSE, enabled = FALSE;
     const char *heap_body = "\xe4\xb8\xad\xe6\x96\x87 heap message\n\"quoted\"";
     memcpy(before, target, sizeof(before));
-    /* Validate the route predicate independently of fixture addresses. */
+    /* 独立于测试桩地址校验路由条件。 */
     uintptr_t base = 0x180000000ULL;
     if (!wx41930_route_matches(base, base + WX41930_ALLOWED_RETURN_RVA, 1,
                               base + WX41930_RECORD_VTABLE_RVA) ||
@@ -98,7 +98,7 @@ int main(void) {
     fixture_allowed_call(&record, 0);
     fixture_allowed_call(&record, 0x81);
     if (filtered != 3 || observed_force != 0x81 || accepted != 2) goto cleanup;
-    make_record(&record, "\xc0\xaf"); /* Overlong UTF-8 must be rejected. */
+    make_record(&record, "\xc0\xaf"); /* 必须拒绝过长 UTF-8 编码。 */
     fixture_allowed_call(&record, 1);
     if (rejected != 1) goto cleanup;
     make_record(&record, "wrong vtable");

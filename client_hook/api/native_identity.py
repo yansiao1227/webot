@@ -1,7 +1,7 @@
-"""Exact outgoing metadata only; never read or supplement message history.
+"""仅处理精确的出站元数据，不读取或补充聊天历史。
 
-Inputs originate in a captured native Record or this submit's observed Task.
-No endpoint accepts a caller-selected path, account, conversation or sort key.
+输入来自采集到的原生 Record，或本次提交观察到的 Task。
+所有端点都不接受调用方自行选择的路径、账号、会话或排序键。
 """
 import hashlib
 import re
@@ -62,7 +62,7 @@ def outgoing_metadata(account, conversation, sort_seq, created=None, message_typ
 
 
 def enrich_outgoing(result, account, conversation, created=None):
-    """Failure to resolve identity never changes an accepted send to failure."""
+    """身份解析失败不能把已接受的发送改为失败。"""
     try:
         kind=result.get('message_type','text')
         if result.get('reference',{}).get('source')=='weixin41930_native_reference_v1':
@@ -72,5 +72,5 @@ def enrich_outgoing(result, account, conversation, created=None):
             raise ValueError('native server identity mismatch')
         return {**result,**{k:v for k,v in metadata.items() if v is not None}}
     except Exception as error:
-        # No keys, database contents or inbound body enter diagnostics.
+        # 诊断信息不得包含密钥、数据库内容或入站正文。
         return {**result,'native_message_id_state':'unavailable','native_identity_error':type(error).__name__}

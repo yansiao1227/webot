@@ -1,4 +1,4 @@
-"""Exercise DLL loading, local output and stop/expiry in our own host process."""
+"""在自有宿主进程中验证 DLL 加载、本地输出及停止或到期行为。"""
 
 from pathlib import Path
 import sys
@@ -62,7 +62,7 @@ def exercise(expire=False, automatic=False, slow=False):
         assert end['emitted']==expected
         assert end['entry_hits']==expected and end['route_missed']==0
         if slow: assert json.loads(host.stdout.readline())['type']=='emitted'
-        # Original is still callable after worker exits; DLL stays resident.
+        # 工作线程退出后原始函数仍可调用，DLL 保持驻留。
         host.stdin.write('emit\n');host.stdin.flush()
         assert json.loads(host.stdout.readline())['calls']==expected+1
         return {'mode':'expiry' if expire else 'max_events' if automatic else 'in_flight_stop' if slow else 'explicit_stop','passed':True,'events':seen}

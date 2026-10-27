@@ -1,4 +1,4 @@
-"""Build only: pinned native MarkSessionRead wrapper, no hooks or UI automation."""
+"""仅构建固定版本的原生 MarkSessionRead 封装，不安装钩子或执行 UI 自动化。"""
 
 from pathlib import Path
 import sys
@@ -25,7 +25,7 @@ def main():
     prior,_=current_build()
     for name in ('queue-real-profile.h','queue-fixture-profile.h','runtime_pins.h'):
         shutil.copyfile(prior/name,directory/name)
-    # Direct wrapper and its queue/closure/core dispatch chain, not arbitrary addresses.
+    # 使用直接封装及其队列、闭包和核心分派链，不使用任意地址。
     entries=[]
     for rva in (0x15b3570,0x15d4f50,0x291e990,0xd66cb0):
         raw=pe.data[pe.rva_to_offset(rva):][:16]

@@ -1,4 +1,4 @@
-"""Decode attachment bytes using a pinned, locally built SILK decoder."""
+"""使用固定版本、在本机构建的 SILK 解码器解码附件字节。"""
 import hashlib
 import io
 import json

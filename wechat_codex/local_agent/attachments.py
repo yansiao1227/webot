@@ -1,4 +1,4 @@
-"""Bounded resource transfer over MCP, with no access to the hook database."""
+"""通过 MCP 有界传输资源，不访问 Hook 数据库。"""
 import asyncio
 import base64
 import hashlib
@@ -29,7 +29,7 @@ async def fetch(mcp, event_id, target, directory, timeout=60):
     root = Path(directory) / hashlib.sha256(event_id.encode()).hexdigest()
     root.mkdir(parents=True, exist_ok=True)
     name = Path(str(target['payload'].get('name', 'attachment.bin')).replace('\\', '/')).name
-    # Never use an inbound filename as a directory or executable instruction.
+    # 不得将入站文件名用作目录或可执行指令。
     suffix = Path(name).suffix.lower()
     suffix = suffix if suffix.isascii() and len(suffix) <= 12 and suffix[1:].isalnum() else '.bin'
     path = root / ('content' + suffix)
@@ -71,10 +71,10 @@ def prune(directory, protected=(), now=None):
     for folder in root.iterdir():
         if folder.is_symlink() or not folder.is_dir() or folder.name in protected or not re.fullmatch(r'[0-9a-f]{64}', folder.name):
             continue
-        # Only our fixed owned cache layout, never recurse through inbound paths.
+        # 仅处理自有的固定缓存布局，不沿入站路径递归。
         entries = list(folder.rglob('*'))
         files = [f for f in entries if f.is_file()]
-        # Check the final Windows deletion target and every child before recursion.
+        # 递归前检查最终 Windows 删除目标及每个子项。
         if (folder.resolve().parent == root.resolve() and
                 all(not f.is_symlink() and f.resolve().is_relative_to(folder.resolve()) for f in entries) and
                 files and all(f.stat().st_mtime < cutoff for f in files)):

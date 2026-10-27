@@ -1,4 +1,4 @@
-"""Real loopback HTTP in all three layers, owned bytes and a scripted model only."""
+"""三层均使用真实回环 HTTP，仅使用自有字节和脚本化模型。"""
 import asyncio
 from pathlib import Path
 import secrets

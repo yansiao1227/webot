@@ -80,8 +80,8 @@ def send_rpc(args, request_id, account, target, body, query=False):
         remote = api.allocate(process, bytes(rpc))
         thread = api.thread(process, modules[0][1] + entry, remote)
         if api.api.WaitForSingleObject(thread, 6000) != 0:
-            # The remote thread may still be using this allocation. Never free it
-            # or submit again on the assumption that timeout means cancellation.
+            # 远程线程可能仍在使用此分配，不得释放它，
+            # 也不能因超时就假定操作已取消并再次提交。
             return {'error': 'rpc_thread_pending', 'state': 'unknown', 'allocation_retained': True}
         finished = True
         rpc = rpc_type.from_buffer_copy(api.read(process, remote, C.sizeof(rpc)))

@@ -1,4 +1,4 @@
-// Fixed-artifact, bounded function decompilation. No target execution.
+// 对固定构建产物进行有界函数反编译，不执行目标程序。
 // @category WeChat.Native
 import ghidra.app.script.GhidraScript;
 import ghidra.app.cmd.disassemble.DisassembleCommand;
@@ -14,8 +14,8 @@ public class ExportSelected extends GhidraScript {
         String[] args = getScriptArgs();
         Path output = Paths.get(args[0]);
         Files.createDirectories(output);
-        // Fixed-build stack probing helper preserves RAX. Without a callfixup
-        // large stack-frame methods decompile with a spurious dynamic stack.
+        // 固定版本的栈探测辅助函数保留 RAX；缺少 callfixup 时，
+        // 大栈帧方法的反编译结果会出现错误的动态栈。
         Address probe = toAddr("186569e50");
         Function probeFunction = getFunctionAt(probe);
         if (probeFunction == null) {

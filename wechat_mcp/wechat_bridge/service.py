@@ -18,7 +18,7 @@ REFERENCE_SOURCE = 'weixin41930_native_reference_v1'
 
 
 def group_reply_allowed(event, account):
-    """Fail closed; neither an agent argument nor display text can grant access."""
+    """默认拒绝访问，代理参数或显示文本都不能授予权限。"""
     if not event.get('conversation_id', '').endswith('@chatroom'):
         return True
     mentions = event.get('mentions')

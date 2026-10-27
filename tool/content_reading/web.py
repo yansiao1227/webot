@@ -1,4 +1,4 @@
-"""Bounded source reads. Page text remains untrusted external content."""
+"""有界读取来源，页面文本始终属于不可信外部内容。"""
 import http.client
 import ipaddress
 import json
@@ -22,8 +22,8 @@ _dns_cache = {}
 
 
 def _public_dns(host):
-    # TUN proxies commonly synthesize benchmark-range Fake-IP answers. Validate
-    # the real public destination over TLS instead of treating all private IPs as safe.
+    # TUN 代理常返回基准测试网段的 Fake-IP 地址，应通过 TLS 校验
+    # 真实公网目标，不能将所有私有 IP 视为安全。
     cached = _dns_cache.get(host)
     if cached and time.monotonic() - cached[0] < 60:
         return cached[1]
@@ -54,13 +54,13 @@ def _public_dns(host):
 
 
 def validate_url(url):
-    """Accept HTTP(S) including localhost/LAN; filesystem inputs use media tools."""
+    """接受 HTTP(S)，包括 localhost 和局域网；文件系统输入使用媒体工具处理。"""
     parsed = urlsplit(url)
     if (parsed.scheme not in ('http', 'https') or not parsed.hostname or
             parsed.username is not None or parsed.password is not None or
             any(ord(c) < 33 for c in url) or '\\' in url):
         raise ValueError('来源必须为有效HTTP(S)链接')
-    parsed.port  # Reject malformed ports before opening a connection.
+    parsed.port  # 建立连接前拒绝格式错误的端口。
 
 
 def resolve_public(url):
@@ -113,7 +113,7 @@ def fetch(url, timeout=20, *, public_only=False, output_dir=None, image_only=Fal
             raise ValueError('网页读取超时')
         port = parsed.port or (443 if parsed.scheme == 'https' else 80)
         connection = http.client.HTTPConnection(parsed.hostname, port, timeout=remaining)
-        # Pin the checked address; preserve Host and TLS SNI/certificate validation.
+        # 固定已校验的地址，同时保留 Host、TLS SNI 和证书校验。
         sock = socket.create_connection((address or parsed.hostname, port), timeout=remaining)
         try:
             if parsed.scheme == 'https':
@@ -148,8 +148,8 @@ def fetch(url, timeout=20, *, public_only=False, output_dir=None, image_only=Fal
                 if not chunk:
                     break
                 raw.extend(chunk)
-                # read1 closes the underlying socket once Content-Length is
-                # exhausted. Do not set its timeout again on the next iteration.
+                # Content-Length 指定的内容读尽后，read1 会关闭底层套接字，
+                # 下一次循环不能再次设置其超时时间。
                 if response.isclosed():
                     break
             if len(raw) > limit:
@@ -157,7 +157,7 @@ def fetch(url, timeout=20, *, public_only=False, output_dir=None, image_only=Fal
             if is_image:
                 from PIL import Image
                 from io import BytesIO
-                # Check actual image data before leaving a file for visual inspection.
+                # 留下文件供视觉检查前，先校验实际图像数据。
                 with Image.open(BytesIO(raw)) as image:
                     image.verify()
                 output = Path(output_dir) if output_dir else cache_directory('content-image-')
@@ -195,7 +195,7 @@ def browser(url, options):
     public_only = options.get('public_only', False)
     if public_only:
         resolve_public(url)
-    # Serialize shared persistent profiles across conversation workers.
+    # 会话工作线程共享持久浏览器配置时串行访问。
     if not _profile_lock.acquire(timeout=5):
         raise ValueError('浏览器profile正在处理另一条卡片，请稍后重试')
     try:
@@ -248,7 +248,7 @@ def browser(url, options):
                             raise
                 if response and response.status >= 400:
                     raise ValueError('来源返回HTTP ' + str(response.status))
-                # Read rendered article text, including late client-side rendering.
+                # 读取渲染后的文章正文，包括客户端延迟渲染的内容。
                 selector = '#js_content, article, main'
                 try:
                     page.locator(selector).first.wait_for(state='visible', timeout=4000)
@@ -271,7 +271,7 @@ def browser(url, options):
                 from .bilibili import video_url, read_subtitles, read_discussion
                 if video_url(page.url):
                     network_deadline = time.monotonic() + 35
-                    # Exclude recommendations/comments from the video's source material.
+                    # 从视频来源材料中排除推荐和评论。
                     result['text'] = data['title']
                     result['image_urls'] = []
                     try:
@@ -294,7 +294,7 @@ def read_sources(urls, options=None):
     options = options or {}
     results = []
     for url in list(urls)[:2]:
-        # Callers explicitly select browser rendering; ordinary links use fetch.
+        # 调用方显式选择浏览器渲染，普通链接使用 fetch。
         method = 'playwright' if options.get('browser') and options.get('profile_dir') else 'fetch'
         try:
             value = browser(url, options) if method == 'playwright' else fetch(url, public_only=options.get('public_only', False))
@@ -302,7 +302,7 @@ def read_sources(urls, options=None):
                 raise ValueError('页面没有可读取的文本')
             results.append({**value, 'state': 'read'})
         except Exception as error:
-            # Do not leak browser command lines, cookies or arbitrary provider exception text.
+            # 不泄露浏览器命令行、Cookie 或提供方的任意异常文本。
             results.append({'url': url, 'method': method, 'state': 'unavailable',
                             'error': type(error).__name__,
                             'reason': str(error) if type(error) is ValueError else '来源读取失败，可能需要登录、浏览器依赖或站点允许访问'})

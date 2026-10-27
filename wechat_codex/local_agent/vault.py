@@ -1,4 +1,4 @@
-"""Local DPAPI credential storage; no bridge source imports required."""
+"""本地 DPAPI 凭据存储，无需导入桥接模块源码。"""
 import base64
 import ctypes as c
 from ctypes import wintypes as w

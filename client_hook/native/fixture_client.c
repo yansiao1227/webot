@@ -78,7 +78,7 @@ static void destroy_string(FixtureString32 *string) {
     string->capacity = 15;
 }
 
-/* Tombstones let a second consume be counted without dereferencing freed memory. */
+/* 使用墓碑记录统计二次消费，避免解引用已释放的内存。 */
 static BOOL claim_text_input(const FixtureSharedRef *owned) {
     size_t i;
     BOOL found = FALSE;
@@ -127,7 +127,7 @@ static FixtureCtrl *make_control(void *object, DWORD kind) {
         default: ctrl->vtable = &FixtureControlVtable; break;
     }
     ctrl->strong = 1;
-    ctrl->weak = kind == 20 ? 2 : 1; /* text owns one enable_shared_from_this weak */
+    ctrl->weak = kind == 20 ? 2 : 1; /* text 持有一个 enable_shared_from_this 弱引用。 */
     ctrl->object = object;
     ctrl->kind = kind;
     InterlockedIncrement(&counters.ctrl_allocs);
@@ -152,10 +152,10 @@ FIXTURE_API void FixtureCtrlDestroy(FixtureCtrl *ctrl) {
         destroy_string(text_string(ctrl->object, 0x678));
         HeapFree(GetProcessHeap(), 0, ctrl->object);
         InterlockedIncrement(&counters.text_destroy);
-        /* Native text destruction removes selfweak; bridge removes implicit weak. */
+        /* 原生文本析构移除 selfweak；桥接层移除隐式弱引用。 */
         InterlockedDecrement(&ctrl->weak);
     }
-    /* Queue/result referents are permanent tokens. A released result never cancels work. */
+    /* 队列及结果指向的对象是永久标记；释放结果不会取消工作。 */
     ctrl->object = NULL;
     InterlockedIncrement(&counters.ctrl_destroys);
 }
@@ -201,7 +201,7 @@ FIXTURE_API const void *FixtureFnType(const FixtureFnImpl *self) {
 
 FIXTURE_API void FixtureFnDelete(FixtureFnImpl *self, unsigned char heap) {
     if (self == NULL) return;
-    /* The outer reference never owns, retains, mutates, or destroys its payload. */
+    /* 外层引用从不拥有、持有、修改或销毁其载荷。 */
     InterlockedIncrement(&counters.fn_deletes);
     if (heap != 0) {
         InterlockedIncrement(&counters.fn_heap_frees);
@@ -221,7 +221,7 @@ static DWORD WINAPI run_queue(void *argument) {
         AcquireSRWLockExclusive(&state_lock);
         has_job = queued_function.impl != NULL;
         if (has_job) {
-            /* This second move models the consumer taking its persistent job. */
+            /* 第二次移动用于模拟消费者取得其持久任务。 */
             if (queued_function.impl == (FixtureFnImpl *)&queued_function) {
                 local.impl = queued_function.impl->vtable->move(queued_function.impl, &local);
                 queued_function.impl->vtable->delete_this(queued_function.impl, 0);
@@ -449,8 +449,8 @@ FIXTURE_API void FixtureSetCacheNonempty(BOOL nonempty) {
     ReleaseSRWLockExclusive(&state_lock);
 }
 
-/* Result strings use a separate registry. A sized delete must name the exact
-   raw allocation and byte count; arbitrary pointers can never reach HeapFree. */
+/* 结果字符串使用独立登记表；按大小释放时必须指定精确的原始分配和字节数，
+ * 任意指针都不能进入 HeapFree。 */
 FIXTURE_API void FixtureSizedFree(void *pointer, size_t size) {
     size_t i;
     BOOL found = FALSE;
@@ -566,7 +566,7 @@ FIXTURE_API FixtureSubmitResult *FixtureSubmit(void *context, FixtureSubmitResul
     if (valid) InterlockedIncrement(&counters.field_valid);
     else InterlockedIncrement(&counters.submit_bad_fields);
     if (valid && thread_valid) InterlockedIncrement(&counters.submit_accepted);
-    /* Consume exactly one strong reference, deliberately preserving both pair words. */
+    /* 精确消费一个强引用，有意保留引用对中的两个机器字。 */
     if (live_text && InterlockedDecrement(&owned->control->strong) == 0) {
         FixtureCtrl *ctrl = owned->control;
         ctrl->vtable->destroy(ctrl);
@@ -634,11 +634,11 @@ FIXTURE_API void FixtureStop(void) {
     }
     ReleaseSRWLockExclusive(&state_lock);
     if (thread == NULL) return;
-    /* Retain handles and module state if a callback does not finish promptly. */
+    /* 回调未及时完成时，保留句柄和模块状态。 */
     if (WaitForSingleObject(thread, 6000) != WAIT_OBJECT_0) return;
     AcquireSRWLockExclusive(&state_lock);
     if (worker_thread == thread) {
-        /* Publish safe-to-unload only after the actual thread has terminated. */
+        /* 仅在实际线程终止后发布可安全卸载状态。 */
         InterlockedExchange(&counters.stopped, 1);
         CloseHandle(worker_thread);
         CloseHandle(work_event);

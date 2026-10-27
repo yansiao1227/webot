@@ -1,4 +1,4 @@
-"""Explicit installer for pinned local speech-recognition weights."""
+"""显式安装固定版本本地语音识别权重的工具。"""
 import argparse
 import hashlib
 import json

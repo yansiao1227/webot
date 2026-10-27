@@ -1,4 +1,4 @@
-/* No detours; invoke the same self-queuing wrapper as MarkSessionRead in UI. */
+/* 不安装跳转钩子；调用 UI 中 MarkSessionRead 使用的同一自动入队封装。 */
 #include "runtime.c"
 #include "read-profile.h"
 #include "read_dispatch.h"
@@ -59,7 +59,7 @@ __declspec(dllexport) DWORD WINAPI HookMarkRead(void *argument) {
         if(!entry) {error=ERROR_OUTOFMEMORY;goto done;}
         entry->rpc=input;entry->rpc.calls=1;entry->rpc.submitted=0;entry->rpc.error=ERROR_IO_PENDING;
         entry->next=read_entries;read_entries=entry;++read_count;
-        /* Persist intent in resident operation before native side effect. */
+        /* 先将意图持久保存在驻留操作中，再执行原生副作用。 */
         ch_read_dispatch((ChMarkReadFn)((uintptr_t)core+0x15b3570),entry->rpc.chat);
         entry->rpc.submitted=1;entry->rpc.error=0;
     }

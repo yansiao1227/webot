@@ -6,7 +6,7 @@
 #error This profile requires Windows x64
 #endif
 
-/* Binary layout only. Never construct/destroy the client's C++ objects. */
+/* 仅描述二进制布局，不构造或销毁客户端的 C++ 对象。 */
 typedef struct {
     union { char inline_bytes[16]; uintptr_t heap; } storage;
     uint64_t length;
@@ -21,10 +21,10 @@ typedef struct {
     Wx41930String endpoint_b;                  /* 038 */
     Wx41930String actor_candidate;             /* 058 */
     uint8_t unknown_078[0x90];
-    uint64_t raw_108, raw_110, cached_118;       /* no msg-id/time claims */
+    uint64_t raw_108, raw_110, cached_118;       /* 不声明消息 ID 或时间语义。 */
     uint8_t unknown_120[0x40];
     Wx41930String text;                        /* 160 */
-    Wx41930String source;                      /* 180, optional native msgsource */
+    Wx41930String source;                      /* 偏移 180，可选原生 msgsource。 */
     uint8_t unknown_1a0[0x98];
     uintptr_t parsed_object, parsed_control;    /* 238,240 */
     uintptr_t source_object, source_control;    /* 248,250 */
@@ -33,9 +33,9 @@ typedef struct {
     uint8_t unknown_271[0x27];
 } Wx41930Record;
 
-/* MS x64 ABI: RCX=borrowed record, DL=force (only low byte consumed), void.
- * Do not substitute int/bool return or the constructor's Record* return.
- * GCC's Windows x64 default and MSVC's default both use this platform ABI. */
+/* MS x64 ABI：RCX 为借用记录，DL 为 force（仅使用低字节），返回 void。
+ * 不得改用 int/bool 返回值，也不能套用构造器的 Record* 返回值。
+ * GCC 的 Windows x64 默认约定与 MSVC 默认约定都使用此平台 ABI。 */
 typedef void (*Wx41930FinalizeFn)(Wx41930Record *record, uint8_t force);
 typedef Wx41930Record *(*Wx41930ConstructFn)(Wx41930Record *out, const void *input);
 

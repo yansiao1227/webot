@@ -1,4 +1,4 @@
-"""Pinned DLL loader and bounded, local receive window. No send operations."""
+"""固定版本 DLL 加载器及有界本地接收窗口，不执行发送操作。"""
 from __future__ import annotations
 import argparse
 import ctypes as C

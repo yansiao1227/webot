@@ -1,6 +1,6 @@
-/* Downloads use the verified native owner queue. The optional operator build
- * CH_SEND_TASK_OBSERVER additionally observes the fixed send Task constructor;
- * it forwards exactly once and remains resident until process exit. */
+/* 下载使用已验证的原生所属队列。可选的操作员构建
+ * CH_SEND_TASK_OBSERVER 还会观察固定的发送 Task 构造器；
+ * 每次调用仅转发一次，并保持驻留直到进程退出。 */
 #define CH_RESOURCE_SIDECAR
 #include "runtime.c"
 #include "resource_download.inc"

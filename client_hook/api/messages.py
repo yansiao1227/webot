@@ -1,4 +1,4 @@
-"""Versioned native-message boundary. Never derive identity from payload text."""
+"""按版本约束的原生消息边界，不从载荷正文推导身份。"""
 import re
 import hashlib
 from xml.etree import ElementTree as ET
@@ -8,11 +8,10 @@ REFERENCE_SOURCE = 'weixin41930_native_reference_v1'
 
 
 def current_outgoing(event, minimum_created_at):
-    """Original creation seconds filter history loaded through the UI route.
+    """使用原始创建秒数过滤 UI 路径加载的历史消息。
 
-    The receiver only reports ready after the ceiling-of-start boundary, so
-    every post-ready message can pass without admitting the start second's
-    historical rows. Capture time is never substituted for creation time.
+    接收器仅在启动时间向上取整的边界之后报告就绪，因此就绪后的消息都能通过，
+    同时排除启动当秒的历史记录。不得用采集时间代替创建时间。
     """
     if event.get('direction') != 'outgoing':
         return True
@@ -55,7 +54,7 @@ def attachment_payload(kind, raw):
 
 
 def parse_reference_xml(raw):
-    """Parse a native appmsg payload, not arbitrary text. Caller verifies kind."""
+    """解析原生 appmsg 载荷，不解析任意文本；调用方负责校验类型。"""
     if not isinstance(raw, str) or len(raw.encode('utf-8')) > 65536 or '\0' in raw:
         raise ValueError('引用载荷无效或超限')
     if '<!DOCTYPE' in raw.upper() or '<!ENTITY' in raw.upper():
@@ -76,7 +75,7 @@ def parse_reference_xml(raw):
 
 
 def native_event(item, instance):
-    """Parse the fixed native profile; unknown kinds stay explicit."""
+    """按固定原生配置解析，未知类型保持显式标记。"""
     a, b, account = item['endpoint_18'], item['endpoint_38'], item['self_id']
     incoming = b == account and a != account
     outgoing = a == account and b != account
@@ -99,8 +98,8 @@ def native_event(item, instance):
         event['native_client_id'] = client_id
         event['native_client_id_source'] = 'weixin41930_record_client278_v1'
     if item.get('native_identity_profile') == 'weixin41930_record_identity_v2':
-        # +134 was a misidentified diagnostic field. Never use it as time;
-        # the provider resolves create_time from the exact native DB row.
+        # +134 曾被误认为时间字段，实际是诊断字段，禁止作为时间使用；
+        # 提供方从精确的原生数据库记录解析 create_time。
         sort_seq = item.get('raw_110')
         if (isinstance(sort_seq,str) and re.fullmatch(r'[1-9][0-9]{0,19}',sort_seq)
                 and int(sort_seq)<1<<64):
@@ -108,8 +107,8 @@ def native_event(item, instance):
                          native_record_metadata_source='weixin41930_record_identity_v2')
     if isinstance(candidate, str) and re.fullmatch(r'[1-9][0-9]{0,19}', candidate):
         event['native_message_id_candidate'] = candidate
-        # Fixed-build native refermsg parser 0xa3b780 reads svrid into its
-        # field+0x20, then copies it to allocation+0x118 = record+0x108.
+        # 固定版本的原生 refermsg 解析器 0xa3b780 将 svrid 读入
+        # field+0x20，再复制到 allocation+0x118，即 record+0x108。
         if item.get('semantic_profile') == 'weixin-4.1.9.30-record-v2':
             event['message_id'] = candidate
     if not peer.endswith('@chatroom'):
@@ -136,5 +135,5 @@ def native_event(item, instance):
         except (ValueError, ET.ParseError):
             event['_native_resource'] = {'id': hashlib.sha256((instance + ':' + str(item['seq'])).encode()).hexdigest(),
                                          'xml': body, 'kind': 'unknown'}
-    # Old capture profiles keep only the candidate and cannot grant identity.
+    # 旧采集配置仅保留候选值，不能据此授予身份。
     return event

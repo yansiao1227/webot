@@ -1,4 +1,4 @@
-"""Loopback-only MCP client. Credentials never enter model input."""
+"""仅连接回环地址的 MCP 客户端，凭据不进入模型输入。"""
 import asyncio
 import http.client
 import ipaddress
@@ -37,7 +37,7 @@ class MCP:
                 raise MCPError('MCP RPC错误')
             value = result['result']
             if value.get('isError'):
-                # No error text, event body or secret is written to operator logs.
+                # 操作日志不写入错误文本、事件正文或秘密。
                 raise MCPError('MCP工具拒绝或执行失败')
             return value['structuredContent']
         finally:

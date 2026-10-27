@@ -1,4 +1,4 @@
-"""Standalone speech-to-text JSON CLI, with no application imports."""
+"""独立的语音转文本 JSON 命令行工具，不导入应用模块。"""
 from pathlib import Path
 import sys
 

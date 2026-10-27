@@ -11,8 +11,8 @@ static int read_owned(const void *source,void *dest,size_t size) {
 static void put(size_t at,uint64_t value) {memcpy(arena+at,&value,8);}
 int main(void) {
     const uintptr_t base=0x180000000ULL, input=0x12345678;
-    /* manager=0,state=0xc00,head=0xd00,node=0xe00,vector=0xf00,
-       task=0x1000,record=0x1400. */
+    /* 测试布局：manager=0、state=0xc00、head=0xd00、node=0xe00、vector=0xf00，
+     * task=0x1000、record=0x1400。 */
     put(0xb78,a(0xc00));put(0xc98,a(0xd00));put(0xca0,1);
     put(0xd00,a(0xe00));put(0xd08,a(0xe00));
     put(0xe00,a(0xd00));put(0xe08,a(0xd00));

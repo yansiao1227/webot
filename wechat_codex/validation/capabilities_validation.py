@@ -1,4 +1,4 @@
-"""Real runtime smoke test; uses no WeChat transport and sends no messages."""
+"""真实运行时冒烟测试，不使用微信传输，也不发送消息。"""
 import asyncio
 import json
 from pathlib import Path
@@ -22,7 +22,7 @@ async def main():
             'conversation_id': 'validation',
             'payload': {'text': '请实际调用联网搜索，查找 OpenAI 官方的 Codex web_search 配置说明，并给出官方来源链接。只搜索，不读写本地文件，不运行命令，不操作其他应用。'},
         })
-        # Evidence includes runtime item types, not just the model's claim.
+        # 证据包含运行时条目类型，不能仅依赖模型自身声明。
         report = {'passed': 'webSearch' in info['tool_types'], 'native_sends': 0,
                   'reply': reply, 'generation': info}
         atomic_json(directory / 'result.json', report)

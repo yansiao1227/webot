@@ -1,4 +1,4 @@
-"""Real Codex SDK + simulated MCP: no native WeChat messages are sent."""
+"""真实 Codex SDK 与模拟 MCP 验证，不发送原生微信消息。"""
 import asyncio
 import json
 from pathlib import Path

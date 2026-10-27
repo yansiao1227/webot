@@ -1,9 +1,9 @@
-"""Public execution updates and decision/tool deadlines; never expose reasoning."""
+"""对外执行进度及决定或工具时限，不暴露推理内容。"""
 import asyncio
 
 
 class ProgressDeliveryError(Exception):
-    """Stop the model if a progress send is not confirmed; never skip its index."""
+    """进度发送未确认时停止模型，不跳过该段索引。"""
 
 
 class DecisionClock:
@@ -81,8 +81,8 @@ class DecisionClock:
         method = notification.method
         item = value.get('item') or {}
         kind, item_id = item.get('type'), item.get('id')
-        # Deltas have top-level itemId/delta, not an item object. Never publish
-        # partial schema JSON, and do not deduplicate successive text chunks.
+        # 增量使用顶层 itemId/delta，而不是 item 对象。不得发布
+        # 未完成的 schema JSON，也不能对连续文本片段去重。
         if method == 'item/agentMessage/delta':
             delta = value.get('delta')
             if value.get('itemId') and isinstance(delta, str) and delta:
@@ -95,15 +95,15 @@ class DecisionClock:
                 if (not self.stream_notice_sent and not self.tools and self.callback and
                         self.loop.time() - self.stream_started_at >= self.STREAM_NOTICE_SECONDS):
                     self.stream_notice_sent = True
-                    # Stable across model turns: the durable reply-part callback
-                    # suppresses this notice for the entire inbound request.
+                    # 此标识跨模型轮次保持稳定，持久化回复段回调
+                    # 会对整个入站请求抑制重复提示。
                     await self.publish(self.STREAM_NOTICE_TEXT, self.STREAM_NOTICE_KEY,
                                        'streaming_notice', streaming=True)
             return
         if not item_id:
             return
-        # External input completion marks runtime preparation complete. Older
-        # runtimes may omit it; a real model item also proves readiness.
+        # 外部输入完成表示运行时准备完成；旧运行时可能
+        # 不发送该事件，实际模型条目也可证明就绪。
         if ((method == 'item/completed' and kind == 'functionCallOutput' and item.get('name') == 'wechat_message') or
                 (method in ('item/started', 'item/completed') and
                  (kind in ('reasoning', 'agentMessage') or kind in self.TOOL_TEXT))):
@@ -116,7 +116,7 @@ class DecisionClock:
             self.stream_started_at = None
         if method == 'item/completed' and kind == 'agentMessage' and item.get('phase') in ('commentary', 'partial_answer'):
             text = item.get('text', '').strip()
-            # Structured final/planning fields and raw reasoning are never forwarded.
+            # 不转发结构化的最终回答或规划字段，也不转发原始推理。
             if text and not text.startswith(('{', '```')):
                 if len(text) > 1200 or '\0' in text:
                     raise ProgressDeliveryError('进度消息格式无效')

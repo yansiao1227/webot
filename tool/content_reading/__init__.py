@@ -1,1 +1,1 @@
-"""Local media, documents, webpages and video subtitles; no messaging dependencies."""
+"""本地媒体、文档、网页和视频字幕工具，不依赖消息收发模块。"""

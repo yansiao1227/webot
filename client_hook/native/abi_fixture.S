@@ -3,7 +3,7 @@
 .def fixture_finalize_entry; .scl 2; .type 32; .endef
 .seh_proc fixture_finalize_entry
 fixture_finalize_entry:
-    /* Same first seven instruction bytes as Weixin.dll+9DBBF0. */
+    /* 前七个指令字节与 Weixin.dll+9DBBF0 相同。 */
     pushq %rsi
     .seh_pushreg %rsi
     pushq %rdi

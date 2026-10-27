@@ -1,4 +1,4 @@
-"""Local NDJSON receive interface backed by one reusable resident DLL."""
+"""由一个可复用驻留 DLL 支持的本地 NDJSON 接收接口。"""
 from __future__ import annotations
 import argparse
 import ctypes as C
@@ -55,7 +55,7 @@ def resolve_target(api,args):
     preflight=None
     if args.fixture_pid:
         pid=args.fixture_pid
-        # Query path first so a fixture remains usable if runtime-current changes.
+        # 先查询路径，确保 runtime-current 改变时测试桩仍然可用。
         h=api.api.OpenProcess(0x1000,False,pid)
         if not h: raise C.WinError(C.get_last_error())
         try:
@@ -216,8 +216,8 @@ def run(args):
                     if line.strip()=='stop': api.api.SetEvent(stop);return
             except (OSError,ValueError): pass
             finally:
-                # API parent death closes the pipe. Otherwise this child could
-                # remain alive and keep its DLL lease forever without an owner.
+                # API 父进程退出会关闭管道，否则此子进程可能
+                # 失去所有者后仍存活，并永久持有 DLL 租约。
                 api.api.SetEvent(stop)
         threading.Thread(target=stdin_stop,daemon=True).start()
         consumed=0;buffer=b'';started=time.monotonic();stopping=False
@@ -236,9 +236,9 @@ def run(args):
                         retired_logs.append(logfile)
                         logfile=Path(str(initial_logfile)+'.'+str(index));consumed=0
                         continue
-                    # ready proves the worker copied its pointer-free config.
-                    # Release RPC storage now, including for long sessions whose
-                    # controller might later be terminated without a finally.
+                    # ready 证明工作线程已复制不含指针的配置。
+                    # 现在即可释放 RPC 存储；即使长会话的
+                    # 控制器之后被终止、未执行 finally，也不会泄漏该存储。
                     if item.get('type')=='ready' and remote_cfg:
                         if not api.api.VirtualFreeEx(process,remote_cfg,0,0x8000):
                             raise C.WinError(C.get_last_error())

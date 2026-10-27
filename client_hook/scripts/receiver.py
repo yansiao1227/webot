@@ -1,4 +1,4 @@
-"""Compatibility entry point and reusable resident receive CLI."""
+"""兼容入口和可复用的驻留接收命令行接口。"""
 
 from pathlib import Path
 import sys

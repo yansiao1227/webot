@@ -86,7 +86,7 @@ static void work_native(Operation *operation);
 #ifdef CH_RESOURCE_SIDECAR
 static void work_resource(Operation *operation);
 #endif
-/* Only Invoke(+0x10) may ever be reached. Never hand this inner to client ownership. */
+/* 只能到达 Invoke（+0x10）；绝不能将此内部对象交给客户端持有。 */
 static const FixtureFnVtable own_invoke_only_vtable = { NULL, NULL, inner_invoke, NULL, NULL };
 
 static LONG atomic_read(volatile LONG *value) { return InterlockedCompareExchange(value, 0, 0); }
@@ -157,7 +157,7 @@ static BOOL hash_module(HMODULE module, const struct runtime_profile *profile, B
         memcmp(digest, profile->sha256, sizeof(digest))) goto done;
     ok = TRUE;
     if (retain && disk_bytes) {
-        /* Existing retained mapping is tied to the same verified module hash. */
+        /* 现有保留映射绑定到同一个已验证的模块哈希。 */
     } else if (retain) {
         disk_file = file; disk_mapping = mapping; disk_bytes = bytes; disk_size = (SIZE_T)length.QuadPart;
         file = INVALID_HANDLE_VALUE; mapping = NULL; bytes = NULL;
@@ -256,7 +256,7 @@ static BOOL release_ref(FixtureSharedRef *ref, uintptr_t base, const struct runt
     return TRUE;
 }
 
-/* Only compare bytes inside the already SHA-256 verified, retained file mapping. */
+/* 仅比较已经过 SHA-256 校验且仍保留的文件映射中的字节。 */
 static const BYTE *disk_rva(DWORD rva, SIZE_T length) {
     const IMAGE_DOS_HEADER *dos;
     const IMAGE_NT_HEADERS64 *nt;
@@ -327,7 +327,7 @@ static BOOL release_native(FixtureSharedRef *ref, DWORD expected_vtable) {
     if (InterlockedDecrement(&control->strong) != 0) return TRUE;
     if (!read_self(control, &vtable, sizeof(vtable)) || !native_vtable(vtable, slots)) return FALSE;
     memcpy(&destroy, &slots[0], sizeof(destroy)); destroy(control);
-    /* Native callers reread the control table after object destruction. */
+    /* 原生调用方会在对象析构后重新读取控制表。 */
     if (!read_self(control, &vtable, sizeof(vtable)) || !native_vtable(vtable, slots)) return FALSE;
     if (InterlockedDecrement(&control->weak) != 0) return TRUE;
     if (!read_self(control, &vtable, sizeof(vtable)) || !native_vtable(vtable, slots)) return FALSE;
@@ -343,7 +343,7 @@ static BOOL write_self(void *address, const void *source, SIZE_T length) {
 static BOOL cache_metadata(void *manager, Operation *operation) {
     uintptr_t state = 0, state_again = 0, links[2];
     uint64_t header[2], header_again[2];
-    /* Empty case is exactly 64 requested bytes; no keys or messages are read. */
+    /* 空值情形精确请求 64 字节，不读取密钥或消息。 */
     operation->result.cache_checked = 0; operation->result.cache_empty = 0;
     operation->result.cache_size = 0;
     if (!read_self((BYTE *)manager + 0xB78, &state, 8) || !state ||
@@ -483,7 +483,7 @@ static void work_native(Operation *operation) {
         if (!cache_metadata(refs[2].object, operation) || !account_identity(identity) ||
             strcmp(identity,operation->account)) {work_error=ERROR_NOT_LOGGED_ON;goto cleanup;}
         operation->submit_input = text;
-        memset(&text, 0, sizeof(text)); /* exact owned unit transfers to wrapper */
+        memset(&text, 0, sizeof(text)); /* 将精确的自有单元转移给封装。 */
         address = active_base + active_profile->functions[P_SUBMIT].rva;
         memcpy(&submit, &address, sizeof(submit));
 #ifdef CH_SEND_TASK_OBSERVER
@@ -492,7 +492,7 @@ static void work_native(Operation *operation) {
                                          0xec,0xb0,0,0,0,0x48,0x8d,0xac};
         if (active_profile->kind==2 && ch_task_observer_install(active_base+0x3552820,
                 ctor_entry,active_base+0x874c1e8,active_base+0x8096da8)) {
-            /* Resident storage also survives an uncertain native unwind. */
+            /* 即使原生栈展开状态未知，驻留存储仍然保留。 */
             operation->task_observation=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(ChTaskObservation));
             if (operation->task_observation && ch_task_observe_begin(operation->task_observation,submitted_input))
                 watch=operation->task_observation;
@@ -504,7 +504,7 @@ static void work_native(Operation *operation) {
         if (watch) ch_task_observe_end(watch);
 #endif
         if (submitted != &operation->submit_out) {
-            /* Unknown output construction/ownership: never guess or repeat submit. */
+            /* 输出构造或所有权未知时，不猜测，也不重复提交。 */
             work_error = ERROR_INVALID_DATA; clean = FALSE; goto cleanup;
         }
         operation->result.input_consumed = 1;
@@ -513,8 +513,8 @@ static void work_native(Operation *operation) {
         memcpy(&operation->result.local_status_1, operation->submit_out.bytes + 4, 4);
         operation->result.local_accepted = !(operation->result.local_status_0 | operation->result.local_status_1);
 #ifdef CH_RESOURCE_SIDECAR
-        /* Read only on this owner queue. Bind the exact retained TextInput;
-           no body/time inference, no extra calls or retained native pointers. */
+        /* 仅在此所属队列上读取，绑定精确保留的 TextInput；
+         * 不从正文或时间推断，不增加调用，也不保留原生指针。 */
         if (active_profile->kind==2) {
             operation->result.reserved_v2[1]=ch_outgoing_record110(read_self,active_base,
                 (uintptr_t)refs[2].object,submitted_input,operation->target);
@@ -569,7 +569,7 @@ static void post_once(uintptr_t base, const struct runtime_profile *profile, Ope
         profile->expected_tid_rva >= profile->image_size ||
         4 > profile->image_size - profile->expected_tid_rva ||
         !read_self((LPCVOID)(base + profile->expected_tid_rva), &expected_tid, 4) || !expected_tid)) goto cleanup;
-    /* Copy validated addresses into ABI-correct x64 function pointers. */
+    /* 将已验证地址复制为符合 ABI 的 x64 函数指针。 */
     address = base + profile->functions[P_ROOT].rva; memcpy(&root_fn, &address, sizeof(root_fn));
     address = base + profile->functions[P_QUEUE].rva; memcpy(&get_queue, &address, sizeof(get_queue));
     address = base + profile->functions[P_LOCATION].rva; memcpy(&make_location, &address, sizeof(make_location));
@@ -591,7 +591,7 @@ static void post_once(uintptr_t base, const struct runtime_profile *profile, Ope
         InterlockedExchange(&operation->posted, 1); valid = TRUE;
     }
 cleanup:
-    /* Leftover input is local inline storage and uses the validated native Delete. */
+    /* 残留输入是本地内联存储，使用已验证的原生 Delete 释放。 */
     if (function.impl == (FixtureFnImpl *)function.storage) {
         native.vtable->delete_this(function.impl, 0); function.impl = NULL;
     } else if (function.impl) valid = FALSE;
@@ -605,8 +605,8 @@ cleanup:
 }
 
 
-/* RPC copies all inputs before posting. Operation/closure storage remains resident;
- * no config pointer or external Python buffer survives this call. */
+/* RPC 在投递前复制所有输入。操作和闭包存储保持驻留；
+ * 此调用返回后不保留配置指针或外部 Python 缓冲区。 */
 __declspec(dllexport) DWORD WINAPI HookSend(void *argument) {
     ChSendRpc *rpc=HeapAlloc(GetProcessHeap(),0,sizeof(*rpc));
     Operation *operation=NULL;
@@ -656,8 +656,8 @@ __declspec(dllexport) DWORD WINAPI HookSend(void *argument) {
         while (!atomic_read(&prepare_operation.done) && atomic_read(&prepare_operation.gate)!=3 && GetTickCount64()<until) Sleep(5);
         if (!atomic_read(&prepare_operation.done)) {result=ERROR_NOT_READY;goto unlock;}
         if (prepare_operation.result.callback_error || atomic_read(&prepare_operation.gate)!=2) {result=ERROR_INVALID_DATA;goto unlock;}
-        /* Retained tiny operation records prevent late closures or duplicate IDs
-         * from referencing reclaimed state. Refuse growth at an explicit bound. */
+        /* 保留的小型操作记录可防止延迟闭包或重复 ID
+         * 引用已回收状态；达到显式上限后拒绝继续增长。 */
         if (operation_count>=65536) {result=ERROR_NOT_ENOUGH_MEMORY;goto unlock;}
         operation=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(*operation));
         if (!operation) {result=ERROR_OUTOFMEMORY;goto unlock;}

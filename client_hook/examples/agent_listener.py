@@ -27,9 +27,9 @@ def main():
             with db:
                 db.execute('INSERT OR IGNORE INTO inbox VALUES(?,?)',
                            (event['event_id'], json.dumps(event, ensure_ascii=False)))
-            # This local database insert is the business action. For external
-            # side effects, use a transactional outbox or the service's own
-            # idempotency key; console output is not a transaction boundary.
+            # 此处本地数据库插入即业务操作。对于外部
+            # 副作用，应使用事务性发件箱或服务自身的
+            # 幂等键；控制台输出不是事务边界。
         Client(args.url, args.token).listen(args.consumer_id, handle)
 
 

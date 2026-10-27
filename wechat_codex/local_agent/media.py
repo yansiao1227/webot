@@ -1,4 +1,4 @@
-"""WeChat attachment envelope and cache lifecycle; parsing lives in tool/."""
+"""微信附件封套与缓存生命周期管理，解析实现位于 tool/。"""
 import json
 import os
 from pathlib import Path
@@ -39,5 +39,5 @@ def prepare(attachment, source_options=None):
 
 
 def __getattr__(name):
-    # Compatibility for existing local diagnostics; implementation stays in tool/.
+    # 兼容已有本地诊断入口，实现仍放在 tool/。
     return getattr(content_media, name)

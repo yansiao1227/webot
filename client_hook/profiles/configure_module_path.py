@@ -1,4 +1,4 @@
-"""Inject the local module location into a copied build profile, without loading it."""
+"""将本机模块位置注入复制的构建配置，不加载模块。"""
 import json
 import sys
 from pathlib import Path

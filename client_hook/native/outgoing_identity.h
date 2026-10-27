@@ -4,12 +4,12 @@
 #include <stddef.h>
 #include <string.h>
 
-/* Fixed 4.1.9.30 layout, read only on its owner queue after submit.
- * 166a188 inserts Task into state+90, keyed by Task+38 (conversation).
- * Task+08 retains the exact TextInput; Task+18 retains its Record.
- * Identity requires pointer equality to this submit's input, never text/time.
- * Caller must pin the core SHA and ensure no other native queue can mutate it.
- * Zero is unavailable, not evidence of successful correlation. */
+/* 固定 4.1.9.30 布局，仅在提交后通过其所属队列读取。
+ * 166a188 将 Task 插入 state+90，以 Task+38（会话）为键。
+ * Task+08 保留精确的 TextInput，Task+18 保留其 Record。
+ * 身份确认要求与本次提交输入的指针相等，不能依据正文或时间。
+ * 调用方必须固定核心模块 SHA，并确保其他原生队列无法修改它。
+ * 零值表示不可用，不能作为成功关联的证据。 */
 typedef int (*ChIdentityRead)(const void *, void *, size_t);
 static uint64_t ch_outgoing_record110(ChIdentityRead read, uintptr_t base,
                                      uintptr_t manager, uintptr_t input,

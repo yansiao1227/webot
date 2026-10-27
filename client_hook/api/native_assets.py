@@ -1,4 +1,4 @@
-"""Account-scoped native resource locators; bytes must match native content MD5."""
+"""按账号限定的原生资源定位器；字节内容必须匹配原生内容 MD5。"""
 import hashlib
 from pathlib import Path
 import re
@@ -64,7 +64,7 @@ def decode_image(data, expected_hashes=None, key_provider=None):
 
 
 def decode_dat(data, expected_hashes, key_provider):
-    """Accept a V1/V2 result only when its full content matches native MD5."""
+    """仅在完整内容匹配原生 MD5 时接受 V1/V2 结果。"""
     import struct
     if len(data) < 31 or not expected_hashes:
         raise ApiError(503, 'native_image_integrity_required', '新版DAT需要完整的原生内容校验标识')
@@ -87,7 +87,7 @@ def decode_dat(data, expected_hashes, key_provider):
         raise ApiError(503, 'native_image_decryption_failed', 'DAT解密完整性验证失败')
     head = clear[:-pad] + data[aes_end:raw_end]
     digest = hashlib.md5(head)
-    # No account-wide default XOR constant: validate candidates against this event.
+    # 不使用账号级默认 XOR 常量，必须针对本事件校验候选值。
     tail = data[raw_end:]
     if len(tail) > 1024 * 1024:
         raise ApiError(503, 'native_image_format_invalid', 'DAT尾段超过有界解码上限')
@@ -164,9 +164,9 @@ class NativeAssets:
                 if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(base.resolve()):
                     continue
                 size = path.stat().st_size
-                # V1/V2 adds a 15-byte header and 1..16 bytes of AES padding.
-                # Size only narrows candidates inside the authorized conversation;
-                # it never grants identity: decoded MD5 must still match exactly.
+                # V1/V2 增加 15 字节头部和 1 至 16 字节的 AES 填充。
+                # 大小仅用于在已授权会话内缩小候选范围，
+                # 不能据此确认身份；解码后的 MD5 仍须精确匹配。
                 sized_candidate = ((kind == 'image' and path.suffix.lower() == '.dat' and
                                     any(size == n or 16 <= size - n <= 31 for n in expected_sizes)) or
                                    (kind == 'video' and path.suffix.lower() == '.mp4' and size == expected_size))

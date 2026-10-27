@@ -1,4 +1,4 @@
-"""Operator verification: own business ledger + SDK timings + MCP exact send status."""
+"""操作员验证：自有业务台账、SDK 计时及 MCP 精确发送状态。"""
 import asyncio
 from datetime import datetime
 import hashlib

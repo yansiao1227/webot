@@ -1,7 +1,7 @@
-"""Read a captured voice from the account's native media storage, never chat history.
+"""从账号的原生媒体存储读取已采集语音，不读取聊天历史。
 
-SQLCipher page checks follow the v4 profile. Keys and decrypted database pages
-stay in memory; no plaintext database or key file is written.
+SQLCipher 页校验遵循 v4 配置。密钥和解密后的数据库页仅保留在内存中，
+不写出明文数据库或密钥文件。
 """
 import ctypes as C
 from ctypes import wintypes as W
@@ -35,7 +35,7 @@ def valid_page(data, number, key, salt):
 
 
 def read_database_key(account, salt, first_page):
-    """Bounded readonly memory search, accepting only this media DB's salt+HMAC."""
+    """有界只读内存搜索，仅接受此媒体数据库的 salt+HMAC。"""
     from hook_runtime.loader import Win
     from hook_runtime.target import discover
     api = Win()
@@ -69,10 +69,10 @@ def read_database_key(account, salt, first_page):
         return root, pair
     try:
         owner = identity()
-        # Memory only, bounded and short lived. Every reuse revalidates the
-        # native owner, process incarnation, salt and first-page HMAC; decrypted
-        # pages/SQLite connections are never cached. Avoid rescanning the whole
-        # process for every UI snapshot in a burst of outgoing records.
+        # 仅在内存中短期、有界缓存；每次复用都重新校验
+        # 原生所有者、进程实例、salt 和首页 HMAC；解密后的
+        # 页面及 SQLite 连接从不缓存，避免每次出站记录密集出现时
+        # 都因 UI 快照而重新扫描整个进程。
         scope=(account,target['pid'],api.creation(process)[0],salt,owner)
         with _MEMORY_KEYS_LOCK:
             now=time.monotonic()
@@ -133,7 +133,7 @@ def _checksum(data, order, initial=(0, 0)):
 
 
 def wal_pages(data):
-    """Validate the encrypted WAL, expose only pages through its last commit."""
+    """校验加密 WAL，仅暴露到最后一次提交为止的页面。"""
     if not data:
         return {}, None
     if len(data) < 32:
@@ -153,7 +153,7 @@ def wal_pages(data):
             break
         candidate = _checksum(frame[:8] + frame[24:], order, checksum)
         if candidate != struct.unpack('>II', frame[16:24]):
-            break  # Ignore incomplete/uncommitted tail, never expose it.
+            break  # 忽略并且不暴露不完整或未提交的尾部。
         checksum = candidate
         pending[page] = frame[24:]
         if count:
@@ -166,7 +166,7 @@ def wal_pages(data):
 
 
 def media_snapshot(path, account):
-    """Consistent encrypted snapshot, decrypted only in this provider's memory."""
+    """一致的加密快照，仅在此提供方的内存中解密。"""
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     path = Path(path)
     wal = Path(str(path) + '-wal')
@@ -198,7 +198,7 @@ def media_snapshot(path, account):
             offset = 16 if number == 1 else 0
             clear = decryptor.update(page[offset:-80]) + decryptor.finalize()
             result.extend((b'SQLite format 3\0' if number == 1 else b'') + clear + page[-80:])
-        result[18:20] = b'\1\1'  # Only this private memory snapshot uses rollback mode.
+        result[18:20] = b'\1\1'  # 仅此私有内存快照使用回滚日志模式。
         result[28:32] = struct.pack('>I', count)
         connection = sqlite3.connect(':memory:')
         try:
@@ -213,7 +213,7 @@ def media_snapshot(path, account):
 
 
 def voice_bytes(directory, event, account):
-    """Identity is exact account + chat row + captured server message ID."""
+    """身份由精确账号、聊天记录行和已采集的服务器消息 ID 共同确定。"""
     mid = event.get('message_id')
     if not isinstance(mid, str) or not re.fullmatch(r'[1-9][0-9]{0,19}', mid) or int(mid) >= 1 << 64:
         raise ApiError(403, 'native_voice_identity_required', '语音缺少可靠原生消息标识')

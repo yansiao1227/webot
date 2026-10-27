@@ -1,4 +1,4 @@
-"""Manually sign into the same persistent browser profile used by card reads."""
+"""手动登录与卡片读取共用的持久浏览器配置。"""
 import argparse
 from pathlib import Path
 import sys

@@ -181,7 +181,7 @@ class References(unittest.TestCase):
     def test_duplicate_message_identity_is_ambiguous(self):
         target, _ = self.pair()
         duplicate = dict(target, event_id='duplicate')
-        # Recreate in actual arrival order: both candidates precede the instruction.
+        # 按实际到达顺序重建：两个候选事件都早于指令。
         self.bridge.store.ingest([duplicate, event('second', reference={'source': REFERENCE_SOURCE, 'message_id': '123'})])
         with self.assertRaises(ValueError):
             self.bridge.resolve_reference('second')

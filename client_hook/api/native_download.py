@@ -1,4 +1,4 @@
-"""Exact native-CDN requests, reachable only from an authorized resource fetch."""
+"""精确的原生 CDN 请求，仅能通过已授权的资源获取入口调用。"""
 import hashlib
 from pathlib import Path
 import re
@@ -16,7 +16,7 @@ _ACTIVE_LOCK = threading.RLock()
 
 
 def prune(account, retention=7 * 86400, now=None):
-    """Only our fixed transport namespace; unknown in-flight operations stay pinned."""
+    """仅使用自有的固定传输命名空间，状态未知的在途操作保持原有绑定。"""
     from .native_assets import account_directory
     now = time.time() if now is None else now
     cutoff = now - retention
@@ -116,8 +116,8 @@ def finalize(arguments):
 
 def download(event, raw, prepare_only=False, timeout=45, attempt_id=None):
     from hook_runtime.resource_rpc import invoke
-    # One fresh operation per explicit acquisition, never per status poll.
-    # Retrying a failed acquisition must not reuse a stale native CDN map entry.
+    # 每次显式获取创建一个新操作，状态轮询不创建操作。
+    # 重试失败的获取时，不得复用已失效的原生 CDN 映射条目。
     attempt_id = uuid.uuid4().hex if attempt_id is None else attempt_id
     arguments, output, spec = request_arguments(event, raw, prepare_only, attempt_id)
     with _ACTIVE_LOCK:
@@ -148,10 +148,10 @@ def download(event, raw, prepare_only=False, timeout=45, attempt_id=None):
                 data = output.read_bytes()
                 message_hash_matches = hashlib.md5(data).hexdigest() == spec['md5']
                 native_transfer_complete = status['total'] == status['transferred'] == len(data)
-                # Cache searches need the message MD5 because names/size are not
-                # identities. A new download is already bound to this event's
-                # exact CDN file ID and AES key. Require the actual nested native
-                # completion result and complete byte count for format variants.
+                # 缓存搜索需要消息 MD5，因为名称和大小不能
+                # 证明身份。新下载已绑定到本事件的
+                # 精确 CDN 文件 ID 与 AES 密钥。对于格式变体，必须检查实际嵌套的原生
+                # 完成结果及完整字节数。
                 if message_hash_matches or native_transfer_complete:
                     evidence = {'event_id': event['event_id'], 'message_type': event['message_type'],
                                 'completed_at': time.time(), 'operation_id': arguments[1],
@@ -166,7 +166,7 @@ def download(event, raw, prepare_only=False, timeout=45, attempt_id=None):
                     (directory / (hashlib.sha256(event['event_id'].encode()).hexdigest() + '.json')).write_text(
                         json.dumps(evidence, ensure_ascii=False, indent=2), encoding='utf-8')
                     finalize(arguments)
-                    # This private transport copy is no longer needed after transfer.
+                    # 传输完成后不再需要此私有传输副本。
                     output.unlink()
                     return data
         time.sleep(.25)

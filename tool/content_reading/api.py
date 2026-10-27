@@ -1,4 +1,4 @@
-"""Named, JSON-compatible tool entrypoints for agent and command-line callers."""
+"""供代理和命令行调用方使用的具名工具入口，兼容 JSON。"""
 from pathlib import Path
 import os
 from tool.settings import path_setting
@@ -18,10 +18,10 @@ TOOLS = {
 
 def invoke(tool, *, path=None, url=None, kind=None, name=None, output_dir=None,
            model_dir=None, browser=False, profile_dir=None, channel=None, public_only=False):
-    """Return read/unavailable evidence without calling a model or sending messages.
+    """返回 read/unavailable 状态的证据，不调用模型或发送消息。
 
-    Local access is unrestricted by this API. public_only is an optional caller
-    policy for web reads; messaging authorization belongs to the calling adapter.
+    此 API 不限制本地访问；public_only 是网页读取时可选的调用方策略。
+    消息授权由调用它的适配层负责。
     """
     channel = channel or os.environ.get('CONTENT_BROWSER_CHANNEL') or 'msedge'
     if not profile_dir and os.environ.get('CONTENT_BROWSER_PROFILE_DIR'):

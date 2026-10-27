@@ -1,4 +1,4 @@
-"""Pinned sidecar RPC. No native detours, dynamic instrumentation or unloads."""
+"""固定版本旁路模块 RPC；不使用原生跳转钩子、动态插桩或卸载。"""
 import ctypes as C
 from ctypes import wintypes as W
 import hashlib
@@ -68,8 +68,8 @@ def _invoke(account, request_id, file_id, aes_key, output, size, file_type, mode
             raise RuntimeError('下载进程实例已改变')
         modules = api.modules(target['pid'])
         matches = [m for m in modules if m[0] == normalized(dll)]
-        # Every version has a distinct name and remains resident. No existing
-        # hook, callback, allocation or module is replaced or unloaded.
+        # 每个版本名称独立并保持驻留；不替换或卸载任何已有
+        # 钩子、回调、内存分配或模块。
         if not matches:
             remote = api.allocate(process, str(dll).encode('utf-16-le') + b'\0\0')
             thread = api.thread(process, api.loader(target['pid'], process), remote)

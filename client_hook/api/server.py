@@ -150,7 +150,7 @@ class Application:
             raise ApiError(413, 'text_too_large', '正文超过 64 KiB UTF-8')
         request_id = identifier(body.get('request_id', uuid.uuid4().hex), 'request_id')
         account = self.account()
-        # A repeat must remain queryable even after the client becomes unavailable.
+        # 即使客户端变得不可用，重复请求仍须能够查询。
         try:
             previous = self.store.operation(request_id)
         except ApiError as error:
@@ -299,7 +299,7 @@ class Handler(BaseHTTPRequestHandler):
         self.connection.settimeout(10)
 
     def log_message(self, *args):
-        pass  # No message text, credentials or unbounded access logs.
+        pass  # 不记录消息正文、凭据或无界访问日志。
 
     def do_GET(self):
         self.handle_api()
@@ -361,7 +361,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
         except (OSError, TimeoutError):
-            pass  # Disconnect never acknowledges a message batch.
+            pass  # 连接断开不能确认消费消息批次。
 
     def dispatch(self, path, query, body):
         app = self.server.app

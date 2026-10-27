@@ -130,14 +130,14 @@ class BridgeTests(unittest.TestCase):
             event = self.source.inject(group, '@我 @昵称 <atuserlist>wxid_sim_self</atuserlist>', mentions=mention)
             self.bridge.collect_once(0)
             self.assertFalse(self.bridge.deliver_once())
-            # Even a retained event, known event_id or crafted tool call cannot
-            # bypass the gate by skipping event filtering.
+            # 即使使用已保留事件、已知 event_id 或构造的工具调用，也不能
+            # 通过跳过事件过滤绕过门禁。
             self.bridge.store.ingest([event])
             with self.assertRaises(ValueError):
                 self.bridge.reply_text(event['event_id'], 'must not send')
             self.assertTrue(self.rpc('tools/call', {'name': 'reply_text', 'arguments': {
                 'event_id': event['event_id'], 'text': 'must not send'}})['result']['isError'])
-            self.bridge.deliver_once()  # pending retained outbox is rejected too
+            self.bridge.deliver_once()  # 保留发件箱中的 pending 操作同样必须拒绝。
         self.assertEqual(self.source.sent, [])
         mention = {'state': 'known', 'wxids': [self.source.account], 'all': False, 'source': source}
         event = self.source.inject(group, '真实结构化@', mentions=mention)
@@ -337,7 +337,7 @@ class BridgeTests(unittest.TestCase):
             self.assertTrue(simulation.callbacks.simulation)
             with self.assertRaises(ValueError):
                 simulation.callbacks.destination('https://example.com/events')
-            # A retired remote simulation DB cannot become a local/live DB.
+            # 已停用的远程模拟数据库不能转为本地或真实运行数据库。
             simulation.store.db.execute("UPDATE meta SET value=? WHERE key='identity'",
                                         (json.dumps([self.source.account, True, True]),))
         finally:

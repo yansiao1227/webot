@@ -31,29 +31,27 @@ typedef struct {
     const char *reason;
 } StreamSample;
 
-/*
- * Capture synchronously before the original callback mutates the record.
- * Returns 1: complete UTF-8 text and an endpoint in allowlist, or all-mode;
- *         0: valid endpoints outside allowlist (body is never read);
- *        -1: rejected or incomplete capture.
- * An allowlist of 1..64 native wxid_/chatroom IDs may be used; NULL/count=0
- * selects all-mode (caller still checks incoming direction). Fields in out
- * are populated only on return 1; diagnostics are populated on every return.
- * The endpoint offsets describe evidence, not sender/recipient semantics.
- * raw_c/raw58 also retain their native offsets without inferred semantics.
- * Body limit is 65536 UTF-8 bytes, identifiers/candidate are limited to 511;
- * Optional native msgsource +0x180 is bounded to 16384 bytes. An unreadable
- * source does not discard text, but source180_complete stays false.
- * Total reads have a 90000-byte budget.
- * The 100 ms bound is checked around each synchronous ReadProcessMemory call;
- * the operating system can delay a call beyond that deadline.
- */
+/* 在原始回调修改记录前同步采集。
+ * 返回 1：UTF-8 文本完整，且端点在白名单中或使用全量模式；
+ * 返回 0：端点有效但不在白名单中，不读取正文；
+ * 返回 -1：采集被拒绝或不完整。
+ * 可使用包含 1 至 64 个原生 wxid_/chatroom ID 的白名单；NULL/count=0
+ * 表示全量模式，调用方仍需检查入站方向。仅返回 1 时填充 out 的数据字段，
+ * 每次返回都填充诊断字段。
+ * 端点偏移仅描述采集证据，不表示发送者或接收者语义。
+ * raw_c/raw58 同样保留原生偏移，不推断语义。
+ * 正文最多 65536 个 UTF-8 字节，标识符和候选值最多 511 字节。
+ * 可选原生 msgsource +0x180 最多 16384 字节。无法读取 source 时
+ * 不丢弃文本，但 source180_complete 保持为假。
+ * 读取总预算为 90000 字节。
+ * 每次同步 ReadProcessMemory 调用前后检查 100 毫秒时限；
+ * 操作系统可能使单次调用超出该时限。 */
 int stream_snapshot_capture(HANDLE process, uintptr_t record,
                             uintptr_t expected_vt,
                             const char *const *allowlist, size_t count,
                             StreamSample *out);
 
-/* Write one quoted JSON string. Input must already be valid UTF-8. */
+/* 写出一个带引号的 JSON 字符串；输入必须已经是有效 UTF-8。 */
 void stream_json_escape(FILE *file, const char *value, size_t length);
 
 #endif

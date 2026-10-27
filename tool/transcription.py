@@ -1,4 +1,4 @@
-"""Local CPU speech recognition for audio files; never downloads model weights."""
+"""使用本地 CPU 识别音频文件，从不下载模型权重。"""
 from pathlib import Path
 import threading
 import wave
@@ -14,7 +14,7 @@ _model_dir = None
 
 
 def transcribe_pcm(path, model_dir=None):
-    """Recognize up to 180 seconds of 16-kHz mono signed 16-bit WAV."""
+    """识别最多 180 秒、16 kHz 单声道有符号 16 位 WAV 音频。"""
     global _model, _model_dir
     model_dir = Path(model_dir).resolve() if model_dir else DEFAULT_MODEL_DIR
     if not (model_dir / 'model.bin').is_file():
@@ -43,7 +43,7 @@ def transcribe_pcm(path, model_dir=None):
 
 
 def transcribe_audio(path, *, output_dir=None, model_dir=None):
-    """Normalize a local audio/video file and return timestamped transcription."""
+    """规范化本地音视频文件，并返回带时间戳的转写结果。"""
     path = Path(path).resolve(strict=True)
     if not path.is_file():
         raise ValueError('输入必须为本机文件')

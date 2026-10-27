@@ -1,4 +1,4 @@
-"""Observe fixed-build download arguments for five explicitly authorized samples."""
+"""观察固定版本的下载参数，仅处理明确授权的五个样本。"""
 import argparse
 import json
 from pathlib import Path
@@ -38,7 +38,7 @@ def main():
     with output.open('a', encoding='utf-8') as stream:
         session = frida.attach(target['pid'])
         def message(value, data):
-            # Never log JS errors containing intercepted payloads or script source.
+            # 禁止记录可能包含截获载荷或脚本源码的 JS 错误。
             result = value.get('payload') if value.get('type') == 'send' else {'type': 'observer_error'}
             result = {'observed_at': time.time(), **result}
             stream.write(json.dumps(result, ensure_ascii=False) + '\n'); stream.flush()

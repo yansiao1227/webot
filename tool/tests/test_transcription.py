@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 import wave
-import numpy  # Load native extensions before temporary sys.modules patches.
+import numpy  # 临时替换 sys.modules 前先加载原生扩展。
 
 from tool import transcription, install_transcription_model as installer
 from tool.content_reading import media

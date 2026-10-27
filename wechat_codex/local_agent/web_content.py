@@ -1,4 +1,4 @@
-"""Adapt WeChat source metadata to general web tools."""
+"""将微信来源元数据适配为通用网页工具输入。"""
 from tool.content_reading import web
 
 

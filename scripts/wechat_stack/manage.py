@@ -65,7 +65,7 @@ def matching(command, name):
 
 
 def processes(name):
-    # Never print command lines: another process could have a token in its args.
+    # 禁止打印命令行，其他进程的参数可能包含 token。
     script = "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)\nGet-CimInstance Win32_Process | Where-Object { $_.Name -match '^python(w)?(3([.][0-9]+)?)?[.]exe$' } | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"
     result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
         capture_output=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
@@ -135,8 +135,8 @@ def marker(name):
 
 
 def managed(name, items):
-    # Agent has its own stop protocol. Older hook/MCP processes need an explicit
-    # restart with --stop-file before this manager may claim it can stop them.
+    # Agent 有自己的停止协议。旧版 Hook/MCP 进程必须显式
+    # 使用 --stop-file 重启后，管理器才能保证可以停止它们。
     if name == 'codex':
         return True
     for process in items:
@@ -164,7 +164,7 @@ def spawn(name, config, hook_token, mcp_token):
         for conversation in config['conversations']:
             args += ['--allow-conversation', conversation]
     env = os.environ.copy()
-    # Do not pass unrelated keys or stale parent credentials to the local stack.
+    # 不向本地收发栈传递无关键值或父进程的过期凭据。
     for key in list(env):
         if any(word in key.upper() for word in ('KEY', 'TOKEN', 'SECRET', 'PASSWORD')):
             env.pop(key)
@@ -218,7 +218,7 @@ def start():
     if not PYTHON.is_file():
         raise RuntimeError('未找到 Codex Python 环境，请按 wechat_codex/docs/README.md 安装')
     config, hook_token, mcp_token = configuration()
-    # Preflight all ports before loading the DLL or launching anything.
+    # 加载 DLL 或启动任何进程前，先检查所有端口。
     for name, (_, _, port) in SPECS.items():
         items = processes(name)
         if items and not managed(name, items):
@@ -295,6 +295,6 @@ if __name__ == '__main__':
         say('管理操作被中断；后台服务可能仍在运行，请执行 status。')
         sys.exit(130)
     except Exception as error:
-        # Provider/OS errors may contain secrets: print only our fixed messages.
+        # 提供方或操作系统错误可能包含秘密，只输出自有的固定消息。
         say(str(error) if type(error) is RuntimeError else '操作失败（' + type(error).__name__ + '），请检查现有配置与日志。')
         sys.exit(1)

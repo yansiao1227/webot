@@ -1,4 +1,4 @@
-/* Persistent engine, per-session immutable subscription and owned snapshots. */
+/* 持久引擎、每个会话不可变的订阅，以及自有快照。 */
 #ifdef CH_FIXTURE
 #define CH_RAW_LOG_LIMIT (256*1024)
 #else
@@ -27,8 +27,8 @@ static uintptr_t engine_target, expected_return, expected_vtable;
 static unsigned char engine_before[16];
 static __thread int reentrant;
 
-/* Exact direct calls in the SHA-pinned image, independently disassembled.
-   New routes admit outgoing records only, never broaden incoming capture. */
+/* 这些直接调用位于 SHA 固定的映像中，已分别反汇编验证。
+ * 新路径仅接纳出站记录，不扩大入站采集范围。 */
 static BOOL outgoing_route(uintptr_t caller) {
 #ifdef CH_FIXTURE
     (void)caller; return FALSE;
@@ -38,8 +38,8 @@ static BOOL outgoing_route(uintptr_t caller) {
         0x16fbc72,0x21e0f8b,0x2a966c8,0x3347833,0x33cbfb3,0x342dae9,
         0x3556e8d,0x4591f63,0x4acfe96,0x4ae2026,0x4afacf5,0x4bd8d28,
         0x504fa01,0x5050782,0x50cb100,0x59ac53a,0x59e8ef8,0x59e91ca,
-        /* 0x9e17d0 restores kind/subkind and tail-jumps to the same
-           finalizer with DL=1. These callers retain their own return PC. */
+        /* 0x9e17d0 恢复 kind/subkind，并以 DL=1 尾跳转到同一
+         * 终结函数；这些调用方保留各自的返回 PC。 */
         0x1427603,0x1429561,0x1447d78,0x144b828,0x144eac8,0x1450398,
         0x1452883,0x1480989,0x1487038,0x2c9015f,0x2c90e19};
     if (caller < native_base) return FALSE;
@@ -49,9 +49,9 @@ static BOOL outgoing_route(uintptr_t caller) {
 #endif
 }
 
-/* Fixed-build type predicates: 0xa0a9c0(image), 0xa0a7c0(video),
-   0xa0a820(voice), 0xa0a790(emoji), 0xa0b730(appmsg), 0xa0ae20(card).
-   Payload semantics and resource readiness are checked in the API adapter. */
+/* 固定版本的类型判断函数：0xa0a9c0（图片）、0xa0a7c0（视频）、
+ * 0xa0a820（语音）、0xa0a790（表情）、0xa0b730（appmsg）、0xa0ae20（名片）。
+ * 载荷语义和资源就绪状态由 API 适配层检查。 */
 static BOOL capture_kind(uint32_t kind) {
     switch (kind) {
     case 1: case 3: case 13: case 39: case 34: case 43: case 44:
@@ -75,8 +75,8 @@ static void detour(Wx41930Record *record, uint8_t force) {
     uintptr_t caller=(uintptr_t)__builtin_return_address(0);
     ChSession *s=NULL;
     InterlockedIncrement(&HookStatus.callbacks);
-    /* This lock is the session-admission boundary, not network arrival time.
-     * Ref acquisition and pointer detachment are serialized. */
+    /* 此锁界定会话接纳边界，不代表网络到达时间。
+     * 引用获取和指针分离在此串行执行。 */
     if (!reentrant && TryAcquireSRWLockShared(&session_gate)) {
         if (current_session && current_session->accepting) {
             s=current_session;
@@ -130,7 +130,7 @@ static void detour(Wx41930Record *record, uint8_t force) {
     original(record,force);
     if (s) {
         InterlockedDecrement(&HookStatus.admitted);
-        InterlockedDecrement(&s->refs); /* Last access to this session. */
+        InterlockedDecrement(&s->refs); /* 对该会话的最后一次访问。 */
     }
     InterlockedDecrement(&HookStatus.callbacks);
 }
@@ -195,7 +195,7 @@ __declspec(dllexport) DWORD WINAPI HookRun(void *argument) {
     if (!GetModuleFileNameW(NULL,path,512) || _wcsicmp(path,cfg.exe_path)) return 2;
     if (InterlockedCompareExchange(&engine_busy,1,0)) return 5;
     HookStatus.run_busy=1;
-    /* Retired session memory is never freed while any admitted callback uses it. */
+    /* 仍有已接纳回调使用会话时，不释放已退出会话的内存。 */
     if (retired_session) {
         if (InterlockedCompareExchange(&retired_session->refs,0,0)) { code=5; goto leave; }
         SecureZeroMemory(retired_session,sizeof(*retired_session));

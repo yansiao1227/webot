@@ -1,4 +1,4 @@
-"""Real MCP reference grants + native downloads with exact cache isolation. No sends."""
+"""使用真实 MCP 引用授权及原生下载，精确隔离缓存，不发送消息。"""
 import asyncio
 import hashlib
 import json

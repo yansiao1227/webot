@@ -1,4 +1,4 @@
-"""Operator-only observer of the real group timeout test; never sends/replays."""
+"""仅供操作员观察真实群聊超时测试，不发送或重放。"""
 import asyncio
 import json
 from pathlib import Path

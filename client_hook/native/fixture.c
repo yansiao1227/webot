@@ -1,4 +1,4 @@
-/* Only hooks a function owned by this executable. No Weixin APIs/processes. */
+/* 仅挂钩本可执行文件自有的函数，不调用微信 API 或操作微信进程。 */
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,7 +13,7 @@ static volatile LONG hook_calls;
 
 __attribute__((noinline)) static int fixture_receive(HookRecord *record) {
     InterlockedIncrement(&original_calls);
-    /* Simulate a caller-owned record whose storage expires during cleanup. */
+    /* 模拟由调用方持有、在清理期间存储失效的记录。 */
     int value = (int)record->sequence + 17;
     memset(record->text, 0, sizeof(record->text));
     return value;

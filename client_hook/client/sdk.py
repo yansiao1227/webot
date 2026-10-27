@@ -72,5 +72,5 @@ class Client:
                     raise ClientError(503, {'error': {'code': 'capture_paused'}, 'capture': batch['capture']})
                 continue
             for event in batch['events']:
-                handler(event)  # Exception exits without ack: batch will be redelivered.
+                handler(event)  # 异常退出时不确认消费，批次将重新投递。
             self.ack(consumer_id, batch['ack_token'])

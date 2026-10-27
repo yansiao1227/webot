@@ -1,4 +1,4 @@
-"""Read real hook HTTP events with an independent consumer; never send messages."""
+"""使用独立消费者读取真实 Hook HTTP 事件，从不发送消息。"""
 import argparse
 import http.client
 import json
@@ -36,7 +36,7 @@ def main():
     while time.monotonic() < deadline:
         batch = request('GET', '/messages?consumer_id=' + args.consumer + '&timeout=25')
         for item in batch['events']:
-            # Hook HTTP envelopes hold their event under data on some older versions.
+            # 部分旧版本的 Hook HTTP 封套将事件放在 data 字段下。
             event = item.get('data', item)
             cid = event.get('conversation_id')
             if cid not in config['conversations'] or event.get('direction') != 'incoming':
@@ -60,7 +60,7 @@ def main():
                 output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
                 print(json.dumps(report, ensure_ascii=False), flush=True)
                 return
-        # Keep the successful batch unacknowledged for manual evidence inspection.
+        # 成功批次保持未确认，供人工检查证据。
         if batch.get('ack_token'):
             request('POST', '/consumers/' + args.consumer + '/ack', {'ack_token': batch['ack_token']})
     print(json.dumps({'verified': False, 'reason': 'waiting_for_matching_real_samples'}), flush=True)

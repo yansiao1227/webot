@@ -1,4 +1,4 @@
-"""Read captions from the active authenticated player, never from search snippets."""
+"""从当前已认证播放器读取字幕，不使用搜索摘要。"""
 import json
 import math
 import re
@@ -88,7 +88,7 @@ def read_subtitles(context, page, responses):
     selected = min(subtitles, key=lambda s: priority.get(s.get('lan'), 4))
     url = selected['subtitle_url']
     url = 'https:' + url if url.startswith('//') else url
-    # Guard and DNS checks are installed on this browser context by web_content.
+    # web_content 已为此浏览器上下文安装访问门禁和 DNS 检查。
     from .web import resolve_public
     resolve_public(url)
     tab = context.new_page()
@@ -110,10 +110,10 @@ def read_subtitles(context, page, responses):
 
 
 def read_discussion(page):
-    """Read bounded, rendered comments/danmaku, including Bilibili shadow roots.
+    """有界读取渲染后的评论或弹幕，包括哔哩哔哩的影子 DOM。
 
-    This is audience discussion evidence, never captions or video evidence.
-    Only explicit discussion containers are read; recommendations stay excluded.
+    结果属于观众讨论证据，不能当作字幕或视频证据。
+    仅读取明确的讨论容器，继续排除推荐内容。
     """
     page.evaluate('''() => {
         document.querySelector('#comment, .comment-container, bili-comments')?.scrollIntoView();

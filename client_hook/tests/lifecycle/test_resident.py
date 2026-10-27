@@ -1,4 +1,4 @@
-"""Same-host repeated sessions, lease loss, and draining lifetime regressions."""
+"""同一宿主上重复会话、租约丢失及排空生命周期的回归测试。"""
 
 from pathlib import Path
 import sys
@@ -95,7 +95,7 @@ def main():
         checks['session_subscription_and_counters_isolated']=True
         crashed,crash_load,crash_ready=start()
         emit();crashed.next('message')
-        crashed.process.kill();crashed.process.wait(timeout=10) # Kill our controller only.
+        crashed.process.kill();crashed.process.wait(timeout=10) # 仅终止自有控制器。
         until=time.monotonic()+10
         while command('status')['state']!='idle':
             assert time.monotonic()<until
@@ -110,7 +110,7 @@ def main():
         checks['same_dll_reuse_after_controller_death']=True
         held,held_load,held_ready=start()
         emit('emit-held',wait=False);held.next('message');held.stop()
-        # The original remains deliberately blocked after the session gate closes.
+        # 会话门禁关闭后，原始调用仍按设计保持阻塞。
         assert held.process.wait(timeout=15)!=0
         state=command('status');assert state['state']=='draining' and state['admitted']==1 and not state['installed']
         blocked=Client(host.pid);clients.append(blocked)

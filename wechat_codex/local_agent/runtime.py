@@ -36,7 +36,7 @@ def atomic_json(path, value):
                 temporary.replace(path)
                 break
             except PermissionError:
-                # Windows readers can briefly deny rename/delete sharing.
+                # Windows 读取方可能短暂拒绝重命名或删除共享访问。
                 if attempt == 9:
                     raise
                 time.sleep(.02)

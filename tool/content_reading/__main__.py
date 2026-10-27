@@ -1,4 +1,4 @@
-"""JSON tool CLI: python -m tool.content_reading --help."""
+"""JSON 工具命令行入口：python -m tool.content_reading --help。"""
 import argparse
 import json
 

@@ -61,7 +61,7 @@ class Boundaries(unittest.TestCase):
 
     def test_failure_rolls_back_only_new_services(self):
         calls = []
-        # Existing hook must survive failure of the newly launched bridge.
+        # 新启动的桥接服务失败时，已有 Hook 必须继续运行。
         with patch.object(m, 'configuration', return_value=({}, 'hook', 'mcp')), \
              patch.object(m, 'processes', side_effect=lambda n: [{}] if n == 'client_hook' else []), \
              patch.object(m, 'managed', return_value=True), patch.object(m, 'occupied', return_value=False), \
@@ -133,8 +133,8 @@ class RealProcessLifecycle(unittest.TestCase):
                                 self.fail('模拟服务未就绪')
                             time.sleep(.1)
                     self.assertTrue(result.get('simulation') if name == 'mcp' else result['backend'] == 'simulation')
-                    # Exercise the actual manager's CIM identity check and stop
-                    # protocol against our isolated child, not a live account.
+                    # 通过隔离的自有子进程验证真实管理器的 CIM 身份检查和停止
+                    # 协议，不使用真实账号。
                     with patch.dict(m.SPECS, {name: (entry, root / 'data', port)}), \
                          patch.object(m, 'marker', return_value=root / 'stop'):
                         self.assertTrue(m.processes(name))
@@ -143,7 +143,7 @@ class RealProcessLifecycle(unittest.TestCase):
                     self.assertFalse(m.occupied(port))
                 finally:
                     if process.poll() is None:
-                        # Only this owned simulated child; never kill live services.
+                        # 仅终止这个自有模拟子进程，绝不终止真实服务。
                         process.terminate()
                         process.wait(10)
             self.assertTrue((root / 'data').is_dir())

@@ -1,4 +1,4 @@
-"""Validate a disk artifact against the static profile. Never loads the DLL."""
+"""根据静态配置校验磁盘产物，从不加载 DLL。"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,7 +23,7 @@ def inspect(path: Path) -> dict:
     digest = hashlib.sha256(pe.data).hexdigest()
     checks = {"sha256": digest == profile["sha256"],
               "amd64": pe.machine == int(profile["machine"], 0)}
-    # Do not interpret fixed offsets in a different binary.
+    # 不得在其他二进制文件中解释这些固定偏移。
     details = {}
     if all(checks.values()):
         rva = int(profile["observation_call_rva"], 0)

@@ -1,4 +1,4 @@
-"""Self-contained Win32 metadata support, derived from this project's wxcli."""
+"""独立的 Win32 元数据支持，派生自本项目的 wxcli。"""
 from __future__ import annotations
 import ctypes
 from ctypes import wintypes
@@ -29,7 +29,7 @@ class MODULEENTRY32W(ctypes.Structure):
 
 
 class MetadataReader:
-    """Only OS metadata APIs; no target-memory or remote-execution API."""
+    """仅使用操作系统元数据 API，不使用目标内存或远程执行 API。"""
     def __init__(self):
         self.api = ctypes.WinDLL("kernel32", use_last_error=True)
         definitions = {
@@ -54,12 +54,12 @@ class MetadataReader:
             handle = self.api.CreateToolhelp32Snapshot(flags, pid)
             if handle != ctypes.c_void_p(-1).value:
                 return handle
-            if ctypes.get_last_error() != 24:  # ERROR_BAD_LENGTH
+            if ctypes.get_last_error() != 24:  # 长度错误（ERROR_BAD_LENGTH）。
                 break
         raise ctypes.WinError(ctypes.get_last_error())
 
     def named_processes(self, name):
-        snapshot = self.snapshot(0x2)  # TH32CS_SNAPPROCESS
+        snapshot = self.snapshot(0x2)  # 进程快照标志（TH32CS_SNAPPROCESS）。
         entries = []
         try:
             entry = PROCESSENTRY32W()
@@ -69,7 +69,7 @@ class MetadataReader:
                 if entry.szExeFile.casefold() == name.casefold():
                     entries.append(entry.th32ProcessID)
                 present = self.api.Process32NextW(snapshot, ctypes.byref(entry))
-            if ctypes.get_last_error() != 18:  # ERROR_NO_MORE_FILES
+            if ctypes.get_last_error() != 18:  # 没有更多条目（ERROR_NO_MORE_FILES）。
                 raise ctypes.WinError(ctypes.get_last_error())
         finally:
             self.api.CloseHandle(snapshot)
@@ -84,7 +84,7 @@ class MetadataReader:
         return ticks, date.isoformat(timespec="microseconds").replace("+00:00", "Z")
 
     def inspect(self, pid, expected_exe):
-        handle = self.api.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION only
+        handle = self.api.OpenProcess(0x1000, False, pid)  # 仅使用 QUERY_LIMITED_INFORMATION 权限。
         if not handle:
             raise ctypes.WinError(ctypes.get_last_error())
         try:

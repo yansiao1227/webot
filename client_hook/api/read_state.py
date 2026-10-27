@@ -1,4 +1,4 @@
-"""Native conversation read intent, separate from consumer acknowledgements."""
+"""原生会话已读意图，与消费者确认分开处理。"""
 import hashlib
 import json
 import threading
@@ -76,7 +76,7 @@ class ReadState:
             else:
                 from hook_runtime.read_rpc import invoke
                 request_id='read_'+hashlib.sha256((account+'\0'+eid).encode()).hexdigest()[:56]
-                # Durable intent precedes RPC. Unknown submissions are never retried.
+                # RPC 前先持久化意图；提交状态未知时绝不重试。
                 result['request_id']=request_id
                 native=invoke(account,chat,request_id);result['native']=native
                 if native['error'] or native['thread_error'] or not native['submitted']:
@@ -85,8 +85,8 @@ class ReadState:
                 deadline=time.monotonic()+4
                 while time.monotonic()<deadline:
                     after=snapshot(account,chat);result['after']=after
-                    # A zero count verifies actual local state; newer messages may
-                    # arrive immediately afterward and become unread normally.
+                    # 计数为零用于验证实际本地状态；后续新消息可能
+                    # 立即到达并正常产生未读状态。
                     if (after['unread_count']==0 and after['last_clear_unread_timestamp']>=
                             before['last_clear_unread_timestamp']):
                         state='confirmed'

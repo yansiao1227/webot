@@ -37,7 +37,7 @@ typedef struct {
 } StringHeader;
 
 #ifdef STREAM_SNAPSHOT_TESTING
-/* Test-only hooks are absent from a normal backend build. */
+/* 普通后端构建不包含仅供测试使用的钩子。 */
 static ULONGLONG (*test_clock)(void);
 static BOOL (*test_read)(HANDLE, LPCVOID, LPVOID, SIZE_T, SIZE_T *);
 #endif
@@ -291,8 +291,8 @@ int stream_snapshot_capture(HANDLE process, uintptr_t record,
         goto done;
     out->raw58_len = (size_t)headers[2].length;
     out->body_len = (size_t)headers[3].length;
-    /* Copy the constructor's input+0x50 scalar. Its server-id semantics are
-       verified separately against native reference svrid, never inferred here. */
+    /* 复制构造器的 input+0x50 标量。其服务器 ID 语义
+     * 另行通过原生引用 svrid 校验，不在此处推断。 */
     {
         uint64_t after;
         if (!read_exact(&reader, record + 0x108, &out->raw108, sizeof(out->raw108)) ||
@@ -300,9 +300,9 @@ int stream_snapshot_capture(HANDLE process, uintptr_t record,
             fail(&reader, "record_scalar_changed"); goto done;
         }
     }
-    /* Separate native field, never derived from text. Capture before the
-       original finalizer mutates/destroys the borrowed record. Optional read
-       errors leave mention status unknown without losing the text event. */
+    /* 独立原生字段，不从正文推导。在原始终结函数
+     * 修改或销毁借用记录前采集。可选字段读取失败时，
+     * @ 状态保持未知，但不丢弃文本事件。 */
     {
         ReadContext optional = reader;
         StringHeader source;
@@ -316,8 +316,8 @@ int stream_snapshot_capture(HANDLE process, uintptr_t record,
             memset(out->source180, 0, sizeof(out->source180));
         }
     }
-    /* Some non-class2 Task branches copy TextInput+618 here. Ordinary text
-       does not; an empty field must never be synthesized from body text. */
+    /* 部分非 class2 的 Task 分支会将 TextInput+618 复制到此处，普通文本
+     * 不会这样做；字段为空时，绝不能从正文合成它。 */
     {
         ReadContext optional = reader;
         StringHeader client;

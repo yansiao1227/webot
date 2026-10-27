@@ -1,4 +1,4 @@
-"""Read one public link; normal links use fetch, --browser uses the configured profile."""
+"""读取单个公开链接；普通链接使用 fetch，--browser 使用已配置的浏览器配置。"""
 import argparse
 import json
 from pathlib import Path

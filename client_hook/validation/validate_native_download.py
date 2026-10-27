@@ -1,4 +1,4 @@
-"""Hook-layer native download validation of one captured event, without sends."""
+"""在 Hook 层验证单个已采集事件的原生下载，不执行发送。"""
 
 from pathlib import Path
 import sys

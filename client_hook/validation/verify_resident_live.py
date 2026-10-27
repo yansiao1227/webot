@@ -1,4 +1,4 @@
-"""Three receive-only start/stop rounds in the fixed official client."""
+"""在固定版本官方客户端中进行三轮仅接收的启停验证。"""
 
 from pathlib import Path
 import sys

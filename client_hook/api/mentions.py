@@ -1,4 +1,4 @@
-"""Parse the separately captured native msgsource; never inspect message text."""
+"""解析单独采集的原生 msgsource，不检查消息正文。"""
 import re
 from xml.etree import ElementTree as ET
 

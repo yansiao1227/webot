@@ -1,4 +1,4 @@
-"""Local PE parser derived from tools/pe_trace.py; no outside imports."""
+"""从 tools/pe_trace.py 派生的本地 PE 解析器，不引入外部模块。"""
 import hashlib
 import re
 import bisect
@@ -96,9 +96,9 @@ class PE:
 
     def riprefs(self, targets: list[int], radius: int = 0):
         output = []
-        # REX + LEA/MOV + ModRM with mod=00/rm=101 + signed disp32.
-        # A byte occurrence may be inside another instruction; objdump validation
-        # from the .pdata function start is needed to establish alignment.
+        # 指令组成：REX + LEA/MOV + mod=00/rm=101 的 ModRM + 有符号 disp32。
+        # 匹配字节可能位于其他指令内部，必须用 objdump
+        # 从 .pdata 函数起点校验，才能确定指令对齐。
         pattern = re.compile(rb"[\x48-\x4f][\x8d\x8b\x89][\x05\x0d\x15\x1d\x25\x2d\x35\x3d]....", re.DOTALL)
         for section in self.sections:
             if not section["executable"]:

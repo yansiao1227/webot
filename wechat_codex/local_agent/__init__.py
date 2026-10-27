@@ -1,4 +1,4 @@
-"""Local WeChat dispatcher and resumable Codex sessions."""
+"""本地微信调度器及可恢复的 Codex 会话。"""
 from pathlib import Path
 import sys
 

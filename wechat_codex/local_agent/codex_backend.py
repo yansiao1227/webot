@@ -1,4 +1,4 @@
-"""One SDK-managed local runtime; durable, isolated conversation threads."""
+"""单个由 SDK 管理的本地运行时，使用持久且隔离的会话线程。"""
 import asyncio
 import json
 from pathlib import Path
@@ -81,11 +81,11 @@ class ModelTimeout(TimeoutError):
 
 
 class ModelThreadBusy(Exception):
-    """Never join a previous active turn with a different WeChat trigger."""
+    """不得将不同微信触发请求加入先前仍在执行的轮次。"""
 
 
 class ModelUnavailable(RuntimeError):
-    """A matched terminal capacity failure before any tool ran; no retry needed."""
+    """在任何工具运行前匹配到的终态容量错误，无需重试。"""
     reply = '当前模型服务繁忙（容量不足），这次未能完成。请稍后重试；不会自动重跑。'
 
     def __init__(self, thread_id, turn_id):
@@ -99,8 +99,8 @@ class ModelUnavailable(RuntimeError):
 
 
 def runtime_overrides():
-    # Inherit tools, plugins, MCPs, model and effort from the user's Codex config.
-    # Search must fetch live results for requests about current information.
+    # 从用户的 Codex 配置继承工具、插件、MCP、模型和推理强度。
+    # 处理当前信息请求时，搜索必须获取实时结果。
     return ('web_search="live"',)
 
 
@@ -115,8 +115,8 @@ class CodexBackend:
 
     async def start(self):
         from openai_codex import AsyncCodex, CodexConfig
-        # Keep credentials needed by configured tools; the bridge transport
-        # credential belongs to the external listener, not to the model runtime.
+        # 保留已配置工具需要的凭据；桥接传输
+        # 凭据属于外部监听器，不传入模型运行时。
         self.codex = AsyncCodex(CodexConfig(cwd=self.workspace, env={'MCP_BRIDGE_TOKEN': ''},
             **({'codex_bin':self.codex_bin} if self.codex_bin else {}),
             config_overrides=runtime_overrides(), client_name='wechat_codex', client_title='WeChat Codex agent'))
@@ -131,8 +131,8 @@ class CodexBackend:
         if self.model:
             options['model'] = self.model
         if thread_id:
-            # Existing v1 threads persist a tool-prohibiting base prompt.
-            # Replace it when resuming; new threads keep Codex's native prompt.
+            # 现有 v1 线程持久保存了禁止使用工具的基础提示词。
+            # 恢复时替换该提示词；新线程保留 Codex 原生提示词。
             options['base_instructions'] = INSTRUCTIONS
             thread = await self.codex.thread_resume(thread_id, **options)
         else:
@@ -190,10 +190,10 @@ class CodexBackend:
                 ExternalMessage(tool_name='wechat_message', content=external_content(content, event.get('attachment'))),
                 output_schema=SCHEMA, source='wechat-inbound'), remaining())
         except TimeoutError:
-            # A timed-out start RPC may still have created a turn; never retry it.
+            # 启动 RPC 超时后可能仍已创建轮次，不得重试。
             raise ModelTimeout(thread_id, None, False, 'startup') from None
-        # Cancelling Python's wait does not interrupt the app-server turn.
-        # Keep its subscription alive until interrupt completion is observed.
+        # 取消 Python 等待并不会中断 app-server 中的轮次。
+        # 保持订阅，直到观察到中断完成。
         clock = DecisionClock(turn.id, decision_timeout, event.get('_tool_timeout',self.timeout), on_progress,
                               startup_deadline=deadline, total_deadline=total_deadline,
                               generation_idle_timeout=event.get('_generation_idle_timeout',30))
@@ -202,7 +202,7 @@ class CodexBackend:
             clock.ready()
         terminal_failure = None
         async def collect_stream():
-            # SDK 0.163.0's collector preserves the final-answer phase and typed items.
+            # SDK 0.163.0 的收集器保留最终回答阶段及带类型的条目。
             from openai_codex._run import _collect_async_turn_result
             async def monitored():
                 nonlocal terminal_failure
@@ -244,7 +244,7 @@ class CodexBackend:
                     terminal_failure in ('serverOverloaded','server_overloaded') and clock.tool_started_count==0):
                 await asyncio.gather(collect,return_exceptions=True)
                 raise ModelUnavailable(thread_id,turn.id) from None
-            # Shutdown/crash uncertainty remains distinct from a handled timeout.
+            # 关闭或崩溃造成的未知状态，仍须与已处理的超时分开。
             try:
                 await asyncio.wait_for(turn.interrupt(), 5)
                 if isinstance(error, ProgressDeliveryError):

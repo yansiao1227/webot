@@ -1,4 +1,4 @@
-"""Extract share metadata and source candidates without fetching on receipt."""
+"""提取分享元数据及候选来源，收到消息时不主动获取。"""
 from xml.etree import ElementTree as ET
 
 
@@ -11,7 +11,7 @@ def extract(raw):
     root = ET.fromstring(raw)
     app = root if root.tag == 'appmsg' else root.find('./appmsg')
     if app is None:
-        # Contact/business cards have no source website by default.
+        # 联系人或商务名片默认没有来源网站。
         return {'card_metadata': {k: v for k, v in root.attrib.items()
                                  if k in {'nickname', 'username', 'alias', 'certinfo'}},
                 'source_urls': [], 'media_urls': []}
@@ -19,7 +19,7 @@ def extract(raw):
               ('title', 'des', 'type', 'url', 'appname')}
     values['publisher'] = app.findtext('./appinfo/appname', default='')
     source = public_url(values['url'])
-    # Finder's generic appmsg.url is often a WeChat upgrade/help page, not the feed.
+    # 视频号通用 appmsg.url 常是微信升级或帮助页面，并非视频内容页。
     if values['type'] == '51':
         source = None
     media = []

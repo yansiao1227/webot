@@ -1,4 +1,4 @@
-"""Operator-only group live evidence via MCP. Does not generate or send replies."""
+"""仅供操作员通过 MCP 检查真实群聊证据，不生成或发送回复。"""
 import asyncio
 import hashlib
 import json
@@ -41,7 +41,7 @@ async def main():
                 value['text_chars'] = len(text)
             report['events'][event['event_id']] = value
         report['checked_at'] = time.time()
-        atomic_json(OUTPUT, report)  # Commit local evidence before acknowledging our own consumer.
+        atomic_json(OUTPUT, report)  # 先保存本地证据，再确认自有消费者的消费位置。
         if batch.get('ack_token'):
             await bridge.call('ack_messages', consumer_id=CONSUMER, ack_token=batch['ack_token'])
         if len(batch['events']) < 100:

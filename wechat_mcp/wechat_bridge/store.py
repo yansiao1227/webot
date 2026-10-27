@@ -82,7 +82,7 @@ class Store:
                     resource_id TEXT NOT NULL,PRIMARY KEY(trigger_id,target_id,resource_id));
                 CREATE TABLE IF NOT EXISTS seen_events(event_id TEXT PRIMARY KEY,digest TEXT NOT NULL);
             ''')
-            # Keep the reserved third slot for existing local database identity.
+            # 为现有本地数据库身份保留第三个预留槽位。
             from .schedules import initialize
             initialize(self.db)
             identity = json.dumps([account, bool(simulation), False])
@@ -407,10 +407,10 @@ class Store:
                 (state,json.dumps(result,ensure_ascii=False) if result is not None else None,event_id,index))
 
     def send_echo(self, event_id, operation=None):
-        """Join only native generated identity + account + original conversation.
+        """仅关联原生生成标识、账号和原会话。
 
-        The event and send result can arrive in either order; this query never
-        mutates immutable events, and never infers delivery from an echo.
+        事件和发送结果可以按任意顺序到达；此查询从不修改不可变事件，
+        也不从回显推断对端送达。
         """
         with self.lock:
             operation = operation or self.reply(event_id)
@@ -453,7 +453,7 @@ class Store:
                         value.get('native_client_id') == client_id):
                     matches.append(value)
             mids = {value['message_id'] for value in matches if value.get('message_id')}
-            # A collision/ambiguous server identity must remain explicit.
+            # 服务器标识碰撞或存在歧义时，必须保持显式状态。
             return {'state': 'ambiguous' if len(mids)>1 else 'matched' if matches else 'waiting',
                     'native_client_id': client_id, 'source': 'weixin41930_exact_native_client_id',
                     'message_id': next(iter(mids)) if len(mids)==1 else None,

@@ -33,7 +33,7 @@ class ReadTests(unittest.TestCase):
                 reads.request(eid,'wxid_self');reads.close()
                 self.assertEqual(reads.status(eid,'wxid_self')['state'],'confirmed')
                 reads.request(eid,'wxid_self');self.assertEqual(invoke.call_count,1)
-            # Unknown submission must remain unknown after restart and duplicate requests.
+            # 重启及重复请求后，未知提交仍必须保持未知。
             eid2=store.append('wxid_self',event)
             with patch('api.read_state.snapshot',return_value=before),patch('hook_runtime.read_rpc.invoke',side_effect=TimeoutError):
                 reads.request(eid2,'wxid_self');reads.close()

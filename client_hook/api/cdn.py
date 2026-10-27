@@ -1,4 +1,4 @@
-"""Fetch only native signed sticker CDN resources, after reference authorization."""
+"""仅在引用授权后获取原生签名的表情 CDN 资源。"""
 import hashlib
 import http.client
 import time
@@ -15,8 +15,8 @@ def sticker_bytes(url, expected_md5):
             value.username or value.password or value.port not in (None, 80, 443) or value.fragment or
             value.path != '/110/20401/stodownload' or len(value.query) > 4096):
         raise ApiError(403, 'native_cdn_not_allowed', '原生表情资源地址不在已验证的下载范围')
-    # Preserve the native transport. Do not disable TLS certificate checks for
-    # HTTPS URLs; this build's signed sticker URL is normally HTTP.
+    # 保留原生传输方式，不禁用 HTTPS URL 的 TLS 证书校验；
+    # 此版本的签名表情 URL 通常使用 HTTP。
     connection = (http.client.HTTPSConnection if value.scheme == 'https' else
                   http.client.HTTPConnection)(value.hostname, timeout=15)
     try:

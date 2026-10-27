@@ -1,4 +1,4 @@
-"""Choose a bounded snapshot before generation; never fetch attachment bytes."""
+"""生成前选择有界上下文快照，不获取附件字节。"""
 import json
 
 def choose(store,event_id,mode=None,limit=None,query=''):
@@ -6,8 +6,8 @@ def choose(store,event_id,mode=None,limit=None,query=''):
     if not current:raise ValueError('触发事件不存在')
     event=json.loads(current['event'])
     if mode is None:
-        # A fresh task thread cannot judge missing history from the trigger alone.
-        # Supply a small snapshot even when the wording looks self-contained.
+        # 新任务线程无法仅凭触发消息判断缺少哪些历史。
+        # 即使消息措辞看似完整，也提供一个小范围快照。
         mode='reference' if event.get('reference') else 'recent'
     if mode not in ('none','recent','reference','search'):raise ValueError('不支持的上下文范围')
     default_limit=12
@@ -52,8 +52,8 @@ def choose(store,event_id,mode=None,limit=None,query=''):
                 own_sorts.add(native.get('native_sort_seq'))
     for row in rows:
         e=json.loads(row['event'])
-        # Use durable model outputs as assistant context. Auto echoes are not
-        # independently selected; manual outgoing text remains eligible.
+        # 将持久保存的模型输出用作助手上下文，不单独选择
+        # 自动回显；人工出站文本仍可作为候选。
         if e.get('direction')=='outgoing':
             key=(e.get('native_sort_seq') or e.get('native_client_id') or e['event_id'])
             if key in seen:continue
@@ -68,7 +68,7 @@ def choose(store,event_id,mode=None,limit=None,query=''):
             {k:e['payload'][k] for k in ('name','mime','size') if k in e['payload']})
         if row['state']=='accepted' and row['reply']:
             r=json.loads(row['result']or'{}')
-            # Multi-part answers are reconstructed from committed parts.
+            # 从已提交的回复段重建多段回答。
             answer='\n'.join(p['text'] for p in r.get('parts',[]) if p.get('state')=='accepted') or row['reply']
             value['assistant_reply']=answer[:4000]
         selected.append((row['seq'],value))
@@ -76,12 +76,12 @@ def choose(store,event_id,mode=None,limit=None,query=''):
         center=[item for item in selected if item[0]==anchor['seq']]
         before=[item for item in selected if item[0]<anchor['seq']][:limit]
         after=list(reversed([item for item in selected if item[0]>anchor['seq']]))[:limit]
-        # Reserve the exact target first, then prefer its nearest neighbours.
+        # 先为精确目标预留空间，再优先选择距离最近的消息。
         selected=center+[item for pair in zip(before,after) for item in pair]+before[len(after):]+after[len(before):]
     messages=[]
     for seq,value in selected:
         size=len(json.dumps(value,ensure_ascii=False).encode())
-        if used+size>16000:continue  # Leave room for the selection envelope.
+        if used+size>16000:continue  # 为选择结果封套预留空间。
         messages.append((seq,value));used+=size
         if anchor is None and len(messages)>=limit:break
     result['messages']=[value for seq,value in sorted(messages,key=lambda item:item[0])]

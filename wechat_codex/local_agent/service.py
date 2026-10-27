@@ -1,4 +1,4 @@
-"""Local long poll -> durable queue -> Codex -> guarded MCP reply."""
+"""本地长轮询 → 持久队列 → Codex → 受门禁保护的 MCP 回复。"""
 import asyncio
 import json
 import time
@@ -69,7 +69,7 @@ class Agent:
             return await process(self,job)
         eid = job['event_id']
         event = json.loads(job['event'])
-        # Operator configuration only. Message text cannot change deadlines.
+        # 仅使用操作员配置，消息正文不能更改时限。
         event.pop('_model_timeout', None)
         for key, default in (('startup_timeout',60),('generation_idle_timeout',30),('turn_timeout',600)):
             event['_'+key] = self.config.get(key,default)
@@ -166,14 +166,14 @@ class Agent:
                             self.mcp.call('get_conversation_read_status', event_id=eid), 5)
                         self.store.update(eid, 'generating', result={'conversation_read': read_result})
                     except (MCPError, TimeoutError):
-                        pass  # A read-status problem never changes a generated answer.
+                        pass  # 已读状态异常不能改变已经生成的回答。
                 self.store.update(eid, 'generated', reply=reply, result={'generation': generation}, context=context)
                 state = 'generated'
             if state == 'generated':
                 if self.stop.is_set():
-                    return  # Keep the unsent answer durable for an explicit restart.
-                await self.verify()  # Account, gate and competing agents checked before every send.
-                self.store.update(eid, 'sending')  # Commit before the request can leave this process.
+                    return  # 持久保留尚未发送的回答，等待显式重启。
+                await self.verify()  # 每次发送前检查账号、门禁及是否存在竞争代理。
+                self.store.update(eid, 'sending')  # 请求离开本进程前先提交事务。
                 try:
                     result = await self.mcp.call('reply_text', event_id=eid, text=reply)
                 except Exception:
@@ -185,8 +185,8 @@ class Agent:
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            # Never silently create another thread on a failed resume, and
-            # never fall back to another recipient or an unguarded HTTP send.
+            # 恢复失败时不得静默创建其他线程，
+            # 也不得回退到其他收件人或不受门禁保护的 HTTP 发送。
             self.store.update(eid, 'failed', error=type(error).__name__)
 
     def apply_result(self, eid, result):
@@ -246,7 +246,7 @@ class Agent:
         loops = []
         try:
             await self.backend.start()
-            # Register a new consumer at latest before reporting readiness.
+            # 报告就绪前，将新消费者注册到 latest 位置。
             await self.collect_once(0)
             loops = [asyncio.create_task(self.collect_loop()), asyncio.create_task(self.worker_loop()),
                      asyncio.create_task(self.stop.wait())]
@@ -258,7 +258,7 @@ class Agent:
             for task in loops:
                 task.cancel()
             await asyncio.gather(*loops, return_exceptions=True)
-            # Let bounded model turns finish during normal shutdown.
+            # 正常关闭时允许有界模型轮次执行完成。
             if self.active:
                 await asyncio.gather(*self.active.values(), return_exceptions=True)
             await self.backend.close()

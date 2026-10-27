@@ -1,4 +1,4 @@
-"""Local Codex reply agent: configure / run / status / stop / reset."""
+"""本地 Codex 回复代理：configure / run / status / stop / reset。"""
 import argparse
 import asyncio
 import getpass
@@ -41,7 +41,7 @@ async def serve(directory, config):
                     'active_conversations': list(agent.active), **store.status()})
             except Exception as error:
                 agent.errors['heartbeat'] = type(error).__name__
-                agent.stop.set()  # Never leave a silently dead control/stop monitor.
+                agent.stop.set()  # 控制或停止监视器退出时，不能静默忽略。
                 return
             if stop_file.exists():
                 agent.stop.set()
@@ -149,6 +149,6 @@ def entrypoint():
     except KeyboardInterrupt:
         pass
     except Exception as error:
-        # SDK/provider exceptions may contain request payloads or credentials.
+        # SDK 或提供方异常可能包含请求载荷或凭据。
         print(json.dumps({'error': type(error).__name__, 'message': '操作失败，请核对配置、登录与本机状态。'}, ensure_ascii=False))
         raise SystemExit(1)

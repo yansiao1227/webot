@@ -1,4 +1,4 @@
-"""Instruction-align the fixed 4.1.9.30 entry's direct callers, offline only."""
+"""仅离线分析：按指令边界对齐固定版本 4.1.9.30 入口的直接调用方。"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -52,7 +52,7 @@ def main():
     callers = []
     for ref in pe.relbranches([0x9dbbf0], b"\xe8\xe9"):
         f = ref["function"]
-        # Known tiny leaf has no pdata; disassemble its aligned start explicitly.
+        # 已知的小型叶函数没有 pdata；显式从其对齐后的起始位置反汇编。
         start, end = (f["begin_rva"], f["end_rva"]) if f else (0x9e17d0, 0x9e17e2)
         instructions = disassemble(start, end)
         rva = ref["instruction_rva"]

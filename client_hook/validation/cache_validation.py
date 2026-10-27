@@ -1,7 +1,7 @@
-"""Operator-only reversible cache isolation for real uncached-resource validation.
+"""仅供操作员进行真实未缓存资源验证的可恢复缓存隔离。
 
-Never imported by the production MCP or Codex service. The hook owns its database
-and native file layout; the stack validator uses this helper only for test setup.
+生产 MCP 或 Codex 服务从不导入此模块。Hook 负责其数据库和原生文件布局；
+收发栈验证器仅在测试准备阶段使用此辅助模块。
 """
 
 from pathlib import Path

@@ -1,4 +1,4 @@
-"""File entrypoint usable from any working directory."""
+"""可从任意工作目录使用的文件入口。"""
 from pathlib import Path
 import sys
 

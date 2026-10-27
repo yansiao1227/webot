@@ -1,4 +1,4 @@
-"""Repository .env settings; no shell evaluation or third-party dependencies."""
+"""仓库 .env 配置，不执行 shell 表达式，也不依赖第三方库。"""
 import ipaddress
 import os
 from pathlib import Path
@@ -9,10 +9,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_env(path=None, environ=None):
-    """Existing process variables win; relative .env paths use repository root.
+    """已有进程环境变量优先；相对 .env 路径以仓库根目录为基准。
 
-    Supports KEY=value, optional export/quotes and ${VAR}. Windows backslashes
-    remain literal. No commands, Python escapes or executable expressions run.
+    支持 KEY=value、可选的 export 或引号，以及 ${VAR}。Windows 反斜杠
+    保持字面含义，不执行命令、Python 转义或可执行表达式。
     """
     env = os.environ if environ is None else environ
     path = Path(path or env.get('RE_WECHAT_ENV_FILE', ROOT / '.env'))
@@ -76,7 +76,7 @@ def executable_setting(name, default):
 
 def local_host():
     host = os.environ.get('RE_WECHAT_HOST') or '127.0.0.1'
-    # Keep the existing loopback boundary; changing .env must not expose WeChat.
+    # 保留现有回环地址边界，修改 .env 不得向外暴露微信服务。
     if host != 'localhost' and not ipaddress.ip_address(host).is_loopback:
         raise ValueError('RE_WECHAT_HOST 必须为回环地址')
     if ':' in host:

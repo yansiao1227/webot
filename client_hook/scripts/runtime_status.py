@@ -1,4 +1,4 @@
-"""Read only our DLL's fixed diagnostic counters. Never reads chat records."""
+"""仅读取自有 DLL 的固定诊断计数器，不读取聊天记录。"""
 
 from pathlib import Path
 import sys
@@ -37,7 +37,7 @@ def inspect(run_dir):
     try:
         export_rva(pe,'HookStatus',code=False)
     except RuntimeError:
-        pass # Retained v1 evidence uses private diagnostic symbols.
+        pass # 保留的 v1 证据使用私有诊断符号。
     else:
         from hook_runtime.service import read_status
         process=api.api.OpenProcess(0x1000|0x10,False,pid)

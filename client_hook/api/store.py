@@ -121,14 +121,14 @@ class Store:
                     "cursor_expired": gap is not None and row["position"] < gap}
 
     def append(self, account, event):
-        # Full event is owned JSON, never a pointer into a client object.
+        # 完整事件是自有 JSON，不是指向客户端对象的指针。
         body = encode(event)
         with self.transaction():
             fact = None
             native_identity = None
             if (event.get('direction') == 'outgoing' and event.get('native_client_id_source') ==
                     'weixin41930_record_client278_v1' and event.get('native_client_id')):
-                native_identity = event['native_client_id']  # Preserve existing dedup digests.
+                native_identity = event['native_client_id']  # 保留已有的去重摘要。
             elif (event.get('direction') == 'outgoing' and event.get('native_record_metadata_source') ==
                     'weixin41930_record_identity_v2' and event.get('native_sort_seq')):
                 native_identity = ['record_sort_seq',event['native_sort_seq'],event['native_created_at']]
@@ -152,8 +152,8 @@ class Store:
     def _prune(self):
         total = int(self.db.execute("SELECT value FROM meta WHERE key='event_bytes'").fetchone()[0])
         through = {}
-        # Only walk the prefix actually being removed; normal append stays O(1)
-        # instead of copying the whole retained message log into Python.
+        # 仅遍历实际删除的前缀，使正常追加保持 O(1)，
+        # 避免将全部保留消息日志复制到 Python 中。
         while True:
             row = self.db.execute("SELECT seq,account,created,bytes FROM events ORDER BY seq LIMIT 1").fetchone()
             if row is None:
@@ -180,7 +180,7 @@ class Store:
                 (SELECT 1 FROM resources r JOIN events e ON r.event_id=? || ':' || CAST(e.seq AS TEXT)
                  WHERE r.state='running' AND json_extract(e.body,'$.payload.resource_id')=native_resources.id)''',
                  (self.clock() - self.retention, self.database_id))
-        # Keep only the most recent removal boundary per account.
+        # 每个账号仅保留最近的删除边界。
         self.db.execute("DELETE FROM gaps WHERE id NOT IN (SELECT max(id) FROM gaps GROUP BY account)")
 
     def prune(self):

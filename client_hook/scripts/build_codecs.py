@@ -1,4 +1,4 @@
-"""Build the fixed SILK SDK locally; does not load or call WeChat."""
+"""在本机构建固定版本 SILK SDK，不加载或调用微信。"""
 
 from pathlib import Path
 import sys

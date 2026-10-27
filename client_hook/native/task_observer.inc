@@ -1,7 +1,7 @@
-/* The constructor ABI and record layouts are fixed-artifact evidence. This
- * observer forwards every call exactly once; only our owner-thread TLS entry
- * and exact input pointer may receive copied metadata. No native ownership is
- * acquired, and the observer module stays pinned for process lifetime. */
+/* 构造器 ABI 和记录布局来自固定构建产物的验证证据。此观察器
+ * 对每次调用仅转发一次；仅自有所属线程的 TLS 条目与精确输入指针
+ * 可以接收复制的元数据。不取得原生所有权，
+ * 观察器模块在进程整个生命周期内保持固定驻留。 */
 typedef struct ChTaskObservation {
     uintptr_t input;
     DWORD tid;

@@ -67,8 +67,8 @@ class NativeBackend:
                     self.event_file = Path(item['event_file'])
                 elif kind == 'ready':
                     self.account = item['self_id']
-                    # Preserve a precise seconds boundary before readiness;
-                    # do not ingest old rows loaded by the outgoing UI path.
+                    # 就绪前保留精确的秒级时间边界；
+                    # 不采集出站 UI 路径加载的历史记录。
                     if not self.args.fixture_pid:
                         self.stopped.wait(max(0,self.minimum_created_at-time.time()))
                     self.store.capture('running', account=self.account, instance=self.instance,

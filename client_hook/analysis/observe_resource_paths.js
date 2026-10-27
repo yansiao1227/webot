@@ -1,4 +1,4 @@
-// Appended to the shared readonly observer helpers.
+// 追加到共享的只读观察辅助代码。
 Interceptor.attach(base.add(0x9bea70), {
   onEnter(args) {
     try {

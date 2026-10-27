@@ -1,4 +1,4 @@
-"""Operator maintenance: compact one idle, authorized existing thread; no WeChat send."""
+"""操作员维护：压缩一个空闲且已授权的现有线程，不发送微信。"""
 import argparse
 import asyncio
 import json
@@ -34,8 +34,8 @@ async def compact(directory,conversation):
         before=await thread.read()
         if before.thread.status.model_dump(mode='json').get('type')!='idle':raise ValueError('thread不是空闲')
         atomic_json(output,report)
-        # Compaction's turn notifications are scoped by the SDK router, not
-        # delivered on next_notification(). Buffer before submitting the RPC.
+        # 压缩轮次的通知由 SDK 路由器限定范围，
+        # 不会通过 next_notification() 投递；应在提交 RPC 前开始缓冲。
         from openai_codex.api import AsyncTurnHandle
         router=backend.codex._client._sync._router
         with router.pending_turn(tid) as cursors:
@@ -64,7 +64,7 @@ async def compact(directory,conversation):
         report['idle_after']=(await thread.read()).thread.status.model_dump(mode='json').get('type')=='idle'
     except BaseException as error:
         report['error']=type(error).__name__
-        # No new model request, compaction retry, reset, or WeChat reply here.
+        # 此处不发起新模型请求、不重试压缩、不重置，也不回复微信。
         raise
     finally:
         report['ended_at']=time.time();atomic_json(output,report)
