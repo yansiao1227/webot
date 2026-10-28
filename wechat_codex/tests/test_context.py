@@ -157,6 +157,7 @@ class ContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.status()['jobs'], {'accepted': 1})
         self.assertEqual(self.store.conversation('wxid_test_peer')['paused'], 0)
         self.assertIn('attachment_error', self.backend.generate.call_args.args[1])
+        self.assertIn('not_implemented', self.backend.generate.call_args.args[1]['attachment_error'])
         self.assertEqual(len(self.mcp.sent), 1)
 
     async def test_transfer_verifies_chunks_and_hash_before_exposing_path(self):

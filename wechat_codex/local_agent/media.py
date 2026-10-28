@@ -35,7 +35,8 @@ def prepare(attachment, source_options=None):
     except ValueError:
         raise
     except Exception as error:
-        raise ValueError('附件解析失败：' + type(error).__name__) from None
+        reason = error.strerror if isinstance(error, OSError) else str(error)
+        raise ValueError('附件解析失败：' + type(error).__name__ + '：' + str(reason or '未知原因')[:500]) from None
 
 
 def __getattr__(name):

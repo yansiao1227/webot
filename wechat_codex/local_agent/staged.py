@@ -12,6 +12,7 @@ MAX_PARTS = 64
 async def process(agent,job):
     store=agent.store;eid=job['event_id'];event=json.loads(job['event'])
     details=json.loads(job['result'] or '{}');state=job['state']
+    thread_ready=False
     event.pop('_model_timeout',None)
     if not allowed(event,agent.config['account'],agent.config['conversations']):
         store.update(eid,'failed',error='分段任务不再符合会话或群@门禁');return
@@ -93,16 +94,21 @@ async def process(agent,job):
                 owner=await agent.backend.ensure_thread(job['conversation'])
                 store.set_thread(job['conversation'],owner)
             tid=await agent.backend.create_task_thread(job['conversation'],eid)
+            thread_ready=True
             details.update(adaptive=True,task_thread_id=tid,task_input=event,parts=parts,
                 attachment_target=target,part_index=0)
             store.update(eid,'continuing',result=details)
             state='continuing'
         else:
-            tid=await agent.backend.create_task_thread(job['conversation'],eid,details['task_thread_id'])
+            # 已生成草稿或已提交发送只恢复投递，不依赖模型线程恢复。
+            tid=details['task_thread_id']
             event=details['task_input']
         while not agent.stop.is_set():
             index=details.get('part_index',0)
             if state=='continuing':
+                if not thread_ready:
+                    tid=await agent.backend.create_task_thread(job['conversation'],eid,tid)
+                    thread_ready=True
                 if parts:
                     previous=details.get('generation',{})
                     mode=previous.get('context_mode','none')
@@ -137,7 +143,8 @@ async def process(agent,job):
                                      'profile_dir':agent.config.get('browser_profile_dir',str(store.path/'browser-profile')),
                                      'channel':agent.config.get('browser_channel','msedge')})
                             except (ValueError,MCPError,OSError,KeyError) as error:
-                                event['attachment_error']='附件获取或解析未完成：'+type(error).__name__
+                                reason = error.strerror if isinstance(error, OSError) else str(error)
+                                event['attachment_error']='附件获取或解析未完成：'+type(error).__name__+'：'+str(reason or '未知原因')[:500]
                             store.update(eid,'generating',result={'task_input':event})
                             event['_model_timeout']=agent.config.get('model_timeout',180)
                             reply,generation=await generate(tid,event)

@@ -38,7 +38,9 @@ class MCP:
             value = result['result']
             if value.get('isError'):
                 # 操作日志不写入错误文本、事件正文或秘密。
-                raise MCPError('MCP工具拒绝或执行失败')
+                reason = '；'.join(item['text'] for item in value.get('content', [])
+                                  if item.get('type') == 'text' and isinstance(item.get('text'), str))
+                raise MCPError('MCP工具拒绝或执行失败：' + (reason[:500] or '未知原因'))
             return value['structuredContent']
         finally:
             connection.close()

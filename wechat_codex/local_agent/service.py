@@ -133,8 +133,9 @@ class Agent:
                                      'channel': self.config.get('browser_channel', 'msedge')})
                             except ValueError as error:
                                 followup['attachment_error'] = str(error)
-                            except (MCPError, OSError, KeyError):
-                                followup['attachment_error'] = '资源获取或协议校验失败；原内容尚未读取，不能声称已分析'
+                            except (MCPError, OSError, KeyError) as error:
+                                reason = error.strerror if isinstance(error, OSError) else str(error)
+                                followup['attachment_error'] = '资源获取或协议校验失败：' + type(error).__name__ + '：' + str(reason or '未知原因')[:500]
                             reply, generation = await self.backend.generate(thread_id, followup)
                             reply, generation = await self.scheduler.resolve_actions(job, thread_id, followup, reply, generation, stage='attachment')
                             if generation.get('read_attachment'):

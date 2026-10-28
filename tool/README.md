@@ -39,6 +39,8 @@ result = invoke('read-web-content', url='http://localhost:8080/')
 
 输出目录由调用者指定并为每份输入隔离；省略时在`CONTENT_CACHE_DIR`（默认`tool/state/cache/`）下创建独立目录，调用者负责用完清理。工具不自动按保留期清理。图片/视频/扫描PDF最多8张，视频最长10分钟，音轨转写最多180秒；文本上限100000字符、网页和字幕上限24000字符。具体截断、采样范围见返回值；视频音轨失败时仍保留已取得画面。
 
+文件附件（`prepare_content` 的 `file`/`document`，以及 `read-document`）按实际内容分流：文件头识别PDF和常见图片，ZIP内部结构识别DOCX/XLSX，媒体文件通过ffmpeg的实际音视频流选择转写或视频采样。M4A等音频作为文件发送也可转写；带封面图片的音频仍按音频处理。文件改名不影响已识别格式，返回`detected_type`说明实际处理类型。未识别内容尝试读取文本；APK、普通压缩包和其他不支持的二进制文件明确报错，不执行附件。
+
 `public_only=True` / `--public-only` 用于仅允许公网来源的场景；默认关闭，支持自定义端口和内网地址。`urls.public_url` 和 `web.resolve_public` 仅在调用方选择公网策略时使用。
 
 工具通过 Python API 与 CLI 调用；需要 MCP 接入时，由调用方封装服务。

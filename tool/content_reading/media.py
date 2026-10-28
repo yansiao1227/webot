@@ -1,10 +1,12 @@
 """为任意代理提供有界的本地媒体和文档预处理。"""
 import base64
 import importlib.util
+from io import BytesIO
 from pathlib import Path
 import re
 import subprocess
 import threading
+import zipfile
 from tool.settings import cache_directory
 from tool.media_runtime import run_media as _run, ffmpeg_executable as _ffmpeg
 from tool import transcription
@@ -44,6 +46,56 @@ def _image(path, output):
 
 def _audio(path, output, model_dir=None):
     return transcription.transcribe_audio(path, output_dir=output, model_dir=model_dir)
+
+
+def detect_file(path):
+    """以文件内容识别附件；扩展名只用于提示媒体探测，不作为类型证据。"""
+    with path.open('rb') as stream:
+        head = stream.read(4096)
+    if not head:
+        raise ValueError('附件为空')
+    if head.startswith(b'%PDF-'):
+        return 'document', '.pdf'
+    if head.startswith((b'PK\x03\x04', b'PK\x05\x06', b'PK\x07\x08')):
+        try:
+            with zipfile.ZipFile(path) as archive:
+                names = set(archive.namelist())
+        except zipfile.BadZipFile:
+            raise ValueError('ZIP容器损坏，无法识别附件类型') from None
+        if '[Content_Types].xml' in names:
+            if 'word/document.xml' in names:
+                return 'document', '.docx'
+            if 'xl/workbook.xml' in names:
+                return 'document', '.xlsx'
+        if 'AndroidManifest.xml' in names:
+            raise ValueError('已识别为APK安装包，尚无APK内容解析器')
+        raise ValueError('已识别为ZIP容器，尚无对应内容解析器')
+    if head.startswith((b'\x89PNG\r\n\x1a\n', b'\xff\xd8\xff', b'GIF87a', b'GIF89a',
+                        b'BM', b'II*\x00', b'MM\x00*', b'\x00\x00\x01\x00')) or (
+            head.startswith(b'RIFF') and head[8:12] == b'WEBP'):
+        return 'image', ''
+    if head.startswith((b'MZ', b'\x7fELF', b'Rar!\x1a\x07', b'7z\xbc\xaf\x27\x1c',
+                        b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1')):
+        raise ValueError('该二进制文件格式尚无内容解析器；不会执行附件')
+    media_suffixes = {'.m4a', '.mp3', '.wav', '.flac', '.ogg', '.opus', '.aac', '.amr',
+                      '.mp4', '.mov', '.mkv', '.webm', '.avi', '.mpeg', '.mpg', '.wma', '.wmv'}
+    is_media = (head.startswith((b'RIFF', b'ID3', b'fLaC', b'OggS', b'#!AMR',
+                                 b'\x1a\x45\xdf\xa3', b'\x30\x26\xb2\x75', b'\x00\x00\x01\xba')) or
+                head[4:8] == b'ftyp' or (len(head) > 1 and head[0] == 255 and head[1] & 224 == 224))
+    if is_media or path.suffix.lower() in media_suffixes:
+        probe = subprocess.run([_ffmpeg(), '-nostdin', '-hide_banner', '-protocol_whitelist',
+                                'file,pipe', '-i', str(path)], stdin=subprocess.DEVNULL,
+                               capture_output=True, timeout=15,
+                               creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        info = probe.stderr.decode('utf-8', errors='replace')
+        # ffmpeg仅探测、不指定输出时退出码非零；以实际流信息判断。
+        streams = [line for line in info.splitlines() if re.match(r'\s*Stream #', line)]
+        if any('Video:' in line and '(attached pic)' not in line for line in streams):
+            return 'video', ''
+        if any('Audio:' in line for line in streams):
+            return 'audio', ''
+        raise ValueError('媒体类型探测失败：未找到可读取的音频或视频流')
+    return 'document', ''
 
 
 def _video(path, output, model_dir=None):
@@ -131,7 +183,7 @@ def _document(path, name, output=None):
         return {'text': text[:MAX_TEXT], 'truncated': len(text) > MAX_TEXT}
     if suffix == '.xlsx':
         from openpyxl import load_workbook
-        workbook = load_workbook(path, read_only=True, data_only=False)
+        workbook = load_workbook(BytesIO(path.read_bytes()), read_only=True, data_only=False)
         try:
             parts = []
             truncated = len(workbook.worksheets) > 20
@@ -164,6 +216,13 @@ def prepare_content(path, kind, *, name=None, output_dir=None, model_dir=None):
             raise ValueError('输入必须为本机文件')
         output = Path(output_dir).resolve() if output_dir else cache_directory('content-reading-')
         output.mkdir(parents=True, exist_ok=True)
+        detected = None
+        document_name = name or path.name
+        if kind in ('document', 'file'):
+            kind, suffix = detect_file(path)
+            detected = suffix.lstrip('.') or kind
+            # 使用内容识别出的文档格式，避免伪装/重复下载后缀影响解析。
+            document_name = 'content' + suffix if suffix else 'content.txt'
         if kind in ('image', 'sticker'):
             result = _image(path, output)
         elif kind in ('audio', 'voice'):
@@ -171,16 +230,19 @@ def prepare_content(path, kind, *, name=None, output_dir=None, model_dir=None):
         elif kind == 'video':
             result = _video(path, output, model_dir)
         elif kind in ('document', 'file'):
-            result = _document(path, name or path.name, output)
+            result = _document(path, document_name, output)
         else:
             raise ValueError('未知内容类型')
+        if detected:
+            result = {**result, 'detected_type': detected}
         return result
     except ValueError:
         raise
     except ImportError as error:
         raise ValueError('缺少内容处理依赖：' + str(error.name)) from None
     except Exception as error:
-        raise ValueError('内容解析失败：' + type(error).__name__) from None
+        reason = error.strerror if isinstance(error, OSError) else str(error)
+        raise ValueError('内容解析失败：' + type(error).__name__ + '：' + str(reason or '未知原因')[:500]) from None
 
 
 def external_content(text, attachment=None):

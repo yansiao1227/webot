@@ -6,6 +6,7 @@ from local_agent.storage import Store
 from local_agent.runtime import identity
 from local_agent.service import Agent
 from local_agent.codex_backend import ModelUnavailable, ModelTimeout
+from local_agent.codex_backend import parse_completed_output
 from fakes import CONFIG,ACCOUNT,event,FakeBackend,FakeMCP
 
 class AdaptiveBackend(FakeBackend):
@@ -17,6 +18,55 @@ class AdaptiveTests(unittest.IsolatedAsyncioTestCase):
         self.temp=tempfile.TemporaryDirectory();self.store=Store(self.temp.name,identity(CONFIG))
         self.backend=AdaptiveBackend();self.mcp=FakeMCP();self.agent=Agent(self.store,self.mcp,self.backend,CONFIG)
     async def asyncTearDown(self):self.store.close();self.temp.cleanup()
+
+    async def test_known_format_failure_does_not_block_next_message_or_regenerate(self):
+        self.store.ingest([event('bad-format'),event('following')])
+        async def generate(tid,current):
+            value, info=parse_completed_output('{"reply":' if current['event_id']=='bad-format' else '已有答案')
+            return value['reply'],{**value,**info}
+        self.backend.generate=AsyncMock(side_effect=generate)
+        for _ in range(2):
+            await self.agent.process(self.store.ready()[0])
+        self.assertEqual(self.store.status()['jobs'],{'accepted':2})
+        self.assertFalse(self.store.conversation(event()['conversation_id'])['paused'])
+        self.assertEqual(self.backend.generate.await_count,2)
+        self.assertEqual([p['event_id'] for p in self.mcp.sent],['bad-format','following'])
+        self.assertEqual(self.mcp.sent[-1]['text'],'已有答案')
+
+    async def test_recovered_generated_reply_never_calls_model_and_keeps_part_index(self):
+        self.store.ingest([event('recovered')])
+        self.store.update('recovered','generated',reply='原轮次已有答案',result={
+            'adaptive':True,'task_thread_id':'original-thread','task_input':event('recovered'),
+            'parts':[{'part_index':0,'text':'原进度','state':'accepted'}],
+            'part_index':1,'part_final':True})
+        self.backend.generate=AsyncMock(side_effect=AssertionError('不得重新生成'))
+        self.backend.create_task_thread=AsyncMock(side_effect=AssertionError('不得恢复模型线程'))
+        await self.agent.process(self.store.ready()[0])
+        self.backend.generate.assert_not_awaited()
+        self.backend.create_task_thread.assert_not_awaited()
+        self.assertEqual(self.mcp.sent[0]['part_index'],1)
+        self.assertEqual(self.mcp.sent[0]['text'],'原轮次已有答案')
+        self.assertEqual(self.store.status()['jobs'],{'accepted':1})
+
+    async def test_attachment_failure_reason_reaches_model_and_persistent_task(self):
+        value=event('file-error',text='分析引用附件')
+        value['reference']={'source':'weixin41930_native_reference_v1','message_id':'123'}
+        self.store.ingest([value])
+        original=self.mcp.call
+        async def call(name,**args):
+            if name=='resolve_reference':
+                return dict(event('file'),message_type='file',payload={'name':'sample.m4a'})
+            return await original(name,**args)
+        self.mcp.call=call
+        self.backend.generate=AsyncMock(side_effect=[('读取',{'read_attachment':True}),('读取失败',{})])
+        with patch('local_agent.staged.attachments.fetch',new=AsyncMock(
+                side_effect=ValueError('资源不可用：failed，原因：native_download_metadata_missing'))):
+            await self.agent.process(self.store.ready()[0])
+        reason=self.backend.generate.call_args.args[1]['attachment_error']
+        self.assertIn('native_download_metadata_missing',reason)
+        result=json.loads(self.store.db.execute("SELECT result FROM jobs WHERE event_id='file-error'").fetchone()[0])
+        self.assertEqual(result['task_input']['attachment_error'],reason)
+        self.assertEqual(self.store.status()['jobs'],{'accepted':1})
 
     async def test_stream_notice_is_once_per_request_across_model_turns(self):
         self.store.ingest([event('long-one'),event('long-two')])

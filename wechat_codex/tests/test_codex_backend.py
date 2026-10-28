@@ -9,12 +9,50 @@ from unittest.mock import AsyncMock, patch
 from local_agent.runtime import atomic_json
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from local_agent.codex_backend import CodexBackend, runtime_overrides, ModelTimeout, ModelThreadBusy, ModelUnavailable
+from local_agent.codex_backend import CodexBackend, runtime_overrides, ModelTimeout, ModelThreadBusy, ModelUnavailable, parse_completed_output
 from fakes import event
 from local_agent.progress import ProgressDeliveryError
 
 
 class BackendTests(unittest.IsolatedAsyncioTestCase):
+    async def test_completed_plain_text_is_reused_without_second_turn(self):
+        await self.backend.ensure_thread('peer')
+        self.thread.run.return_value = SimpleNamespace(status='completed', id='turn', duration_ms=10,
+            items=[], final_response='已有的普通文本答案')
+        reply, info = await self.backend.generate('thread-1', event())
+        self.assertEqual(reply, '已有的普通文本答案')
+        self.assertEqual(info['output_format'], 'plain_text')
+        self.assertFalse(info['continue_reply'])
+        self.assertFalse(info['read_attachment'])
+        self.assertIsNone(info['schedule_action'])
+        self.thread.turn.assert_awaited_once()
+        self.handle.interrupt.assert_not_awaited()
+
+    async def test_completed_invalid_structured_output_is_known_failure_without_retry(self):
+        await self.backend.ensure_thread('peer')
+        self.thread.run.return_value = SimpleNamespace(status='completed', id='turn', duration_ms=10,
+            items=[], final_response='{"reply":"broken"')
+        reply, info = await self.backend.generate('thread-1', event())
+        self.assertIn('格式异常', reply)
+        self.assertEqual(info['error'], 'model_output_format')
+        self.assertEqual(info['raw_final_response'], '{"reply":"broken"')
+        self.assertFalse(info['continue_reply'])
+        self.thread.turn.assert_awaited_once()
+
+    def test_fenced_json_and_invalid_control_fields(self):
+        value, info = parse_completed_output('```json\n{"reply":"已有答案"}\n```')
+        self.assertEqual(value['reply'], '已有答案')
+        self.assertEqual(info['output_format'], 'json_fence')
+        for raw in ('[]', 'null', '{"reply":"ok","read_attachment":"true"}',
+                    '{"reply":"ok","context_mode":[]}',
+                    '{"reply":"ok","schedule_action":{"action":"create"}}',
+                    '{"reply":"ok","context_limit":true}', 'x'*1201, ''):
+            with self.subTest(raw=raw[:80]):
+                value, info = parse_completed_output(raw)
+                self.assertEqual(info['error'], 'model_output_format')
+                self.assertFalse(value['continue_reply'])
+                self.assertIsNone(value['schedule_action'])
+
     async def test_atomic_status_survives_brief_windows_reader_sharing(self):
         output = Path(self.temp.name) / 'status.json'
         original = Path.replace
