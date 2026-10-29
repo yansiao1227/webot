@@ -62,7 +62,7 @@ async def process(agent,job):
 
     async def generate(tid, event):
         event['_decision_timeout']=agent.config.get('decision_timeout',agent.config.get('text_model_timeout',30))
-        event['_tool_timeout']=agent.config.get('tool_timeout',agent.config.get('model_timeout',180))
+        event['_tool_timeout']=agent.config.get('tool_timeout',60)
         for key, default in (('startup_timeout',60),('generation_idle_timeout',30),('turn_timeout',600)):
             event['_'+key]=agent.config.get(key,default)
         method=getattr(agent.backend,'generate_with_progress',None)

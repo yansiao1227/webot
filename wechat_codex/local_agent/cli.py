@@ -97,7 +97,7 @@ def main():
         config = {'account': args.account, 'conversations': sorted(set(args.conversation)),
                   'mcp_url': args.mcp_url, 'consumer_id': args.consumer_id, 'model': args.model,
                   'max_concurrency': 2, 'model_timeout': 180, 'text_model_timeout': 30,
-                  'decision_timeout': 30, 'tool_timeout': 180,
+                  'decision_timeout': 30, 'tool_timeout': 60,
                   'startup_timeout': 60, 'generation_idle_timeout': 30, 'turn_timeout': 600,
                   'adaptive_context': True, 'mark_read_on_process': True, 'simulation': False}
         atomic_json(directory / 'credentials.json', {'mcp_token': seal(token)})

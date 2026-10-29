@@ -26,7 +26,7 @@ Python入口通过`tool/settings.py`自动读取配置，不依赖当前工作�
 
 ## 模型计时配置
 
-模型时限保存在Codex agent状态目录的`config.json`，不通过环境变量设置：`startup_timeout=60`、`decision_timeout=30`、`generation_idle_timeout=30`、`tool_timeout=180`、`turn_timeout=600`，单位为秒，范围均为0.05至600。启动预算与响应预算分开；正文非空增量仅续期停滞计时，不能突破单轮总时限。旧配置缺字段时自动使用默认值，修改后需正常重启Codex agent。详见[计时与分段规则](../wechat_codex/docs/ADAPTIVE_REPLIES.md)。
+模型时限保存在Codex agent状态目录的`config.json`，不通过环境变量设置：`startup_timeout=60`、`decision_timeout=30`、`generation_idle_timeout=30`、`tool_timeout=60`、`turn_timeout=600`，单位为秒，范围均为0.05至600。启动预算与响应预算分开；正文非空增量仅续期停滞计时，不能突破单轮总时限。旧配置缺字段时自动使用默认值，修改后需正常重启Codex agent。详见[计时与分段规则](../wechat_codex/docs/ADAPTIVE_REPLIES.md)。
 
 ## 文件放在哪里
 

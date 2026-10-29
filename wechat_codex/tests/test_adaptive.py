@@ -144,7 +144,7 @@ class AdaptiveTests(unittest.IsolatedAsyncioTestCase):
         self.store.ingest([event('stream',text='帮我联网核对')])
         async def stream(tid, request, callback):
             self.assertEqual(request['_decision_timeout'],30)
-            self.assertEqual(request['_tool_timeout'],180)
+            self.assertEqual(request['_tool_timeout'],60)
             self.assertEqual(request['_startup_timeout'],60)
             self.assertEqual(request['_generation_idle_timeout'],30)
             self.assertEqual(request['_turn_timeout'],600)

@@ -248,7 +248,7 @@ class Scheduler:
                                  'context': {'saved_text': task['context']},
                                  'reply_progress': [p['text'] for p in details['parts']], 'remaining_parts': 64 - index,
                                  '_decision_timeout': self.agent.config.get('decision_timeout', 30),
-                                 '_tool_timeout': self.agent.config.get('tool_timeout', 180)}
+                                 '_tool_timeout': self.agent.config.get('tool_timeout', 60)}
                         if details.get('next_step'):
                             event['next_step'] = details['next_step']
                         tid = details.get('thread_id')

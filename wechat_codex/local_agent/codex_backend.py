@@ -245,7 +245,7 @@ class CodexBackend:
             raise ModelTimeout(thread_id, None, False, 'startup') from None
         # 取消 Python 等待并不会中断 app-server 中的轮次。
         # 保持订阅，直到观察到中断完成。
-        clock = DecisionClock(turn.id, decision_timeout, event.get('_tool_timeout',self.timeout), on_progress,
+        clock = DecisionClock(turn.id, decision_timeout, event.get('_tool_timeout',60), on_progress,
                               startup_deadline=deadline, total_deadline=total_deadline,
                               generation_idle_timeout=event.get('_generation_idle_timeout',30))
         clock.started = started
