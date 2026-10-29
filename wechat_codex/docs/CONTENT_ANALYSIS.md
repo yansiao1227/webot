@@ -18,7 +18,7 @@ Fake-IP公网核验现优先使用阿里DoH（dns.alidns.com），Cloudflare（1
 
 卡片首次模型规划新增`read_source`：分析正文时为true；只提取标题、链接等元数据时为false。仍须原生引用＋明确处理要求才读取附件。app-message优先Playwright，用持久profile加载当前页面，读取`#js_content`、`article`、`main`或body的可见文本。成功结果包含来源、最终地址、方式、文本、截断标记和范围；失败保留卡片字段并明确`unavailable`。正文上限24000字，fetch原始响应上限2MiB。
 
-普通文字链接可由模型调用`scripts/read_web.py <URL>`，默认fetch；动态页面加`--browser`，B站/b23链接自动使用浏览器以读取字幕。底层实现现位于根目录[通用工具](../../tool/README.md)，微信兼容层显式指定`public_only=True`：fetch验证每次重定向，固定已验证的公网连接地址，保留HTTPS主机证书校验。Playwright校验请求目标并禁用Service Worker。对本机代理的`198.18.0.0/15` Fake-IP解析，使用上述DoH核验真实公网A记录；不能核验时失败，不把其他私网地址放行。此公网策略只适用于微信来源读取链路，通用工具默认支持本机和内网链接。
+普通文字链接可由模型调用`scripts/read_web.py <URL>`，默认fetch；公众号链接在已配置profile时自动复用浏览器登录状态，动态页面加`--browser`，B站/b23链接自动使用浏览器以读取字幕。底层实现现位于根目录[通用工具](../../tool/README.md)，微信兼容层显式指定`public_only=True`：fetch验证每次重定向，固定已验证的公网连接地址，保留HTTPS主机证书校验。Playwright校验请求目标并禁用Service Worker。对本机代理的`198.18.0.0/15` Fake-IP解析，使用上述DoH核验真实公网A记录；不能核验时失败，不把其他私网地址放行。此公网策略只适用于微信来源读取链路，通用工具默认支持本机和内网链接。
 
 可见页面可能只是登录提示、验证页或视频简介；不能把页面文本等同完整文章、字幕、视频画面或音轨。视频号的媒体候选仍不自动下载或绕过访问限制。
 
@@ -37,6 +37,8 @@ Fake-IP公网核验现优先使用阿里DoH（dns.alidns.com），Cloudflare（1
 ```
 
 在打开的浏览器中访问需要的站点并登录，完成后关闭窗口。后台读取复用该profile，任务之间串行使用它。不要同时运行两个使用同一profile的浏览器。profile包含登录状态，独立于七天附件缓存保留，不复制到文档、模型输入或测试报告。已有Playwright专用profile可直接配置；[Playwright官方文档](https://playwright.dev/python/docs/api/class-browsertype#browser-type-launch-persistent-context)不支持直接自动化Chrome日常主User Data目录，应使用专用目录。
+
+公众号读取使用实际安装浏览器版本的桌面UA，可通过`CONTENT_WEB_USER_AGENT`覆盖。登录profile原地复用，不清除Cookie；仍遇到微信验证页时返回`unavailable`及`verification_required`，需在上述同一profile中手动完成验证，无法保证仅修改UA即可通过站点验证。
 
 不调用微信的真实内容验证：
 

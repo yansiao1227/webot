@@ -7,7 +7,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from tool.content_reading.api import invoke
 from tool.content_reading import web, media
@@ -15,6 +15,14 @@ from tool.content_reading import web, media
 
 class Page(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == '/ua':
+            body = self.headers.get('User-Agent', '').encode('ascii')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path in ('/image', '/fake-image', '/large-image'):
             from PIL import Image
             from io import BytesIO
@@ -164,6 +172,54 @@ class ContentToolsTests(unittest.TestCase):
             value = invoke('read-web-content', url='https://example.com/', browser=True, profile_dir='profile')
         self.assertEqual(value['state'], 'unavailable')
         self.assertNotIn('cookie=secret', json.dumps(value))
+
+    def test_http_user_agent_override_reaches_server(self):
+        agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0 Safari/537.36'
+        with patch.dict(os.environ, {'CONTENT_WEB_USER_AGENT': agent}):
+            value = invoke('read-web-content', url=self.url + '/ua')
+        self.assertEqual(value['result']['text'], agent)
+        with patch.dict(os.environ, {'CONTENT_WEB_USER_AGENT': 'bad\r\nX-Test: value'}):
+            value = invoke('read-web-content', url=self.url)
+        self.assertEqual(value['state'], 'unavailable')
+
+    def test_browser_ua_uses_installed_version_without_headless_marker(self):
+        playwright = MagicMock()
+        probe = playwright.chromium.launch.return_value.__enter__.return_value
+        probe.new_page.return_value.evaluate.return_value = 'Mozilla/5.0 HeadlessChrome/140.1.2.3 Safari/537.36'
+        with patch.dict(os.environ, {'CONTENT_WEB_USER_AGENT': ''}), patch.object(web, '_browser_agents', {}):
+            agent = web._desktop_user_agent(playwright, 'msedge')
+            self.assertEqual(agent, 'Mozilla/5.0 Chrome/140.1.2.3 Safari/537.36')
+            self.assertEqual(web._desktop_user_agent(playwright, 'msedge'), agent)
+        self.assertEqual(playwright.chromium.launch.call_count, 1)
+        playwright.chromium.launch_persistent_context.assert_not_called()
+
+    def test_wechat_links_reuse_configured_profile_and_preserve_url(self):
+        url = 'https://mp.weixin.qq.com/s?mid=123&scene=23#rd'
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+                'CONTENT_BROWSER_PROFILE_DIR': directory}), \
+                patch.object(web, 'browser', return_value={'text': '文章正文', 'content_scope': '页面文本'}) as browser, \
+                patch.object(web, 'fetch', side_effect=AssertionError('must reuse profile')):
+            value = invoke('read-web-content', url=url)
+            self.assertEqual(value['state'], 'read')
+            self.assertEqual(browser.call_args.args[0], url)
+            self.assertEqual(Path(browser.call_args.args[1]['profile_dir']), Path(directory).resolve())
+
+    def test_verification_page_is_unavailable_without_leaking_challenge_token(self):
+        url = 'https://mp.weixin.qq.com/s?mid=123'
+        pages = [
+            {'final_url': 'https://mp.weixin.qq.com/mp/wappoc_appmsgcaptcha?poc_token=secret', 'text': '验证'},
+            {'final_url': url, 'text': '环境异常\n当前环境异常，完成验证后即可继续访问。\n去验证'},
+        ]
+        for page in pages:
+            with patch.object(web, 'browser', return_value=page):
+                value = invoke('read-web-content', url=url, browser=True, profile_dir='existing-profile')
+            self.assertEqual(value['state'], 'unavailable')
+            self.assertEqual(value['error'], 'verification_required')
+            self.assertNotIn('secret', json.dumps(value))
+        with patch.object(web, 'browser', return_value={
+                'text': '文章讨论环境异常与去验证按钮', 'content_scope': '页面文本'}):
+            value = invoke('read-web-content', url='https://example.com/', browser=True, profile_dir='profile')
+        self.assertEqual(value['state'], 'read')
 
     def test_unsupported_binary_is_not_read_as_text(self):
         with tempfile.TemporaryDirectory() as directory:

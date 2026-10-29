@@ -17,6 +17,7 @@ Python入口通过`tool/settings.py`自动读取配置，不依赖当前工作�
 | `CONTENT_MODEL_DIR` | 本机转写权重，默认`tool/state/models/faster-whisper-small` |
 | `CONTENT_BROWSER_PROFILE_DIR` | 专用浏览器profile，可由CLI参数覆盖；示例值为`wechat_codex/state/live/browser-profile` |
 | `CONTENT_BROWSER_CHANNEL` | 默认`msedge` |
+| `CONTENT_WEB_USER_AGENT` | 可选HTTP/浏览器UA覆盖；留空时浏览器按实际安装版本生成桌面UA，HTTP读取Windows Edge/Chrome注册版本，无可用版本时回退`Mozilla/5.0` |
 | `RE_WECHAT_GCC` / `RE_WECHAT_OBJDUMP` / `RE_WECHAT_NM` | 构建/诊断程序路径，留空使用PATH中的同名命令 |
 | `RE_WECHAT_WEIXIN_DLL` | 本机固定版本微信模块位置；构建时写入生成的profile，版本与散列检查保持 |
 

@@ -2,6 +2,7 @@
 import http.client
 import ipaddress
 import json
+import os
 import socket
 import ssl
 import threading
@@ -19,6 +20,57 @@ MAX_TEXT = 24000
 _profile_lock = threading.Lock()
 _fake_network = ipaddress.ip_network('198.18.0.0/15')
 _dns_cache = {}
+_browser_agents = {}
+
+
+def _configured_user_agent():
+    value = (os.environ.get('CONTENT_WEB_USER_AGENT') or '').strip()
+    if any(ord(c) < 32 or ord(c) > 126 for c in value):
+        raise ValueError('CONTENT_WEB_USER_AGENT 必须为可打印ASCII文本')
+    return value
+
+
+def _desktop_user_agent(playwright, channel):
+    configured = _configured_user_agent()
+    if configured:
+        return configured
+    if channel not in _browser_agents:
+        # 使用当前安装版本的UA；探测在临时浏览器中进行，不访问站点或读取登录资料。
+        with playwright.chromium.launch(channel=channel, headless=True, timeout=15000) as probe:
+            page = probe.new_page()
+            _browser_agents[channel] = page.evaluate('navigator.userAgent').replace('HeadlessChrome/', 'Chrome/')
+    return _browser_agents[channel]
+
+
+def _http_user_agent():
+    configured = _configured_user_agent()
+    if configured:
+        return configured
+    # Windows部署优先使用已安装浏览器的版本，不固定一个过期的Chrome版本号。
+    try:
+        import winreg
+        channel = os.environ.get('CONTENT_BROWSER_CHANNEL') or 'msedge'
+        product = 'Google\\Chrome' if channel == 'chrome' else 'Microsoft\\Edge'
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                with winreg.OpenKey(hive, 'Software\\' + product + '\\BLBeacon') as key:
+                    version = winreg.QueryValueEx(key, 'version')[0]
+                if version and all(c in '0123456789.' for c in version):
+                    agent = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                             '(KHTML, like Gecko) Chrome/' + version + ' Safari/537.36')
+                    return agent + (' Edg/' + version if channel != 'chrome' else '')
+            except OSError:
+                continue
+    except ImportError:
+        pass
+    return 'Mozilla/5.0'
+
+
+def _verification_required(value):
+    parsed = urlsplit(value.get('final_url') or value.get('url', ''))
+    return (parsed.hostname == 'mp.weixin.qq.com' and
+            (parsed.path == '/mp/wappoc_appmsgcaptcha' or
+             ('当前环境异常' in value.get('text', '') and '去验证' in value.get('text', ''))))
 
 
 def _public_dns(host):
@@ -120,7 +172,8 @@ def fetch(url, timeout=20, *, public_only=False, output_dir=None, image_only=Fal
                 sock = ssl.create_default_context().wrap_socket(sock, server_hostname=parsed.hostname)
             connection.sock = sock
             connection.request('GET', (parsed.path or '/') + ('?' + parsed.query if parsed.query else ''),
-                               headers={'User-Agent': 'Mozilla/5.0 AgentContentReader', 'Accept-Encoding': 'identity'})
+                               headers={'User-Agent': _http_user_agent(),
+                                        'Accept-Encoding': 'identity'})
             response = connection.getresponse()
             if response.status in (301, 302, 303, 307, 308):
                 location = response.getheader('Location')
@@ -200,8 +253,10 @@ def browser(url, options):
         raise ValueError('浏览器profile正在处理另一条卡片，请稍后重试')
     try:
         with sync_playwright() as playwright:
+            channel = options.get('channel') or os.environ.get('CONTENT_BROWSER_CHANNEL') or 'msedge'
+            user_agent = _desktop_user_agent(playwright, channel)
             with playwright.chromium.launch_persistent_context(
-                    options['profile_dir'], channel=options.get('channel', 'msedge'),
+                    options['profile_dir'], channel=channel, user_agent=user_agent,
                     headless=True, accept_downloads=False, service_workers='block',
                     timeout=15000) as context:
                 context.set_default_timeout(20000)
@@ -294,10 +349,23 @@ def read_sources(urls, options=None):
     options = options or {}
     results = []
     for url in list(urls)[:2]:
-        # 调用方显式选择浏览器渲染，普通链接使用 fetch。
-        method = 'playwright' if options.get('browser') and options.get('profile_dir') else 'fetch'
+        method = 'fetch'
         try:
-            value = browser(url, options) if method == 'playwright' else fetch(url, public_only=options.get('public_only', False))
+            # 公众号复用登录profile，不先以无Cookie的HTTP请求访问；普通链接仍使用fetch。
+            profile_dir = options.get('profile_dir')
+            if not profile_dir and os.environ.get('CONTENT_BROWSER_PROFILE_DIR'):
+                from tool.settings import path_setting
+                profile_dir = str(path_setting('CONTENT_BROWSER_PROFILE_DIR', ''))
+            use_browser = options.get('browser') or urlsplit(url).hostname == 'mp.weixin.qq.com'
+            method = 'playwright' if use_browser and profile_dir else 'fetch'
+            value = (browser(url, {**options, 'profile_dir': profile_dir}) if method == 'playwright'
+                     else fetch(url, public_only=options.get('public_only', False)))
+            if _verification_required(value):
+                # 不返回包含验证token的跳转URL，也不把验证页当作正文。
+                results.append({'url': url, 'method': method, 'state': 'unavailable',
+                                'error': 'verification_required',
+                                'reason': '微信公众平台要求完成验证；请在同一专用浏览器profile中手动验证后再读取'})
+                continue
             if not value.get('text', '').strip() and not value.get('images') and not value.get('image_urls'):
                 raise ValueError('页面没有可读取的文本')
             results.append({**value, 'state': 'read'})

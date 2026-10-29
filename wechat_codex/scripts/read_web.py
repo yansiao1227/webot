@@ -1,4 +1,4 @@
-"""读取单个公开链接；普通链接使用 fetch，--browser 使用已配置的浏览器配置。"""
+"""读取单个公开链接；公众号及 --browser 使用已配置的浏览器配置。"""
 import argparse
 import json
 from pathlib import Path
@@ -20,7 +20,8 @@ def main():
     args = parser.parse_args()
     options = {}
     card = {'source_urls': [args.url]}
-    if args.browser or urlsplit(args.url).hostname in ('b23.tv', 'www.bilibili.com', 'm.bilibili.com', 'bilibili.com'):
+    if args.browser or urlsplit(args.url).hostname in (
+            'mp.weixin.qq.com', 'b23.tv', 'www.bilibili.com', 'm.bilibili.com', 'bilibili.com'):
         from local_agent.runtime import read_config
         config = read_config(args.state_dir)
         options = {'profile_dir': config.get('browser_profile_dir', str(args.state_dir.resolve() / 'browser-profile')),

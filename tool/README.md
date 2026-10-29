@@ -37,6 +37,8 @@ result = invoke('read-web-content', url='http://localhost:8080/')
 
 媒体/文档依赖：`python -m pip install -r tool/requirements-media.txt`；浏览器依赖：`python -m pip install -r tool/requirements-browser.txt`，默认使用已安装的Edge。浏览器profile由`CONTENT_BROWSER_PROFILE_DIR`或显式`profile_dir`指定，channel由`CONTENT_BROWSER_CHANNEL`或CLI覆盖。音频模型位置通过`CONTENT_MODEL_DIR`或显式`model_dir`指定，处理请求时不下载权重。
 
+公众号链接在已配置profile时自动使用浏览器，保留完整原始链接并复用已有登录状态，避免先以无Cookie的HTTP请求读取。浏览器默认从实际安装版本取得桌面UA，移除`HeadlessChrome`标识；`CONTENT_WEB_USER_AGENT`可覆盖HTTP和浏览器UA。HTTP默认使用Windows已安装Edge/Chrome版本的桌面UA，无可用版本时回退`Mozilla/5.0`。这不能保证站点免验证；识别到微信公众号验证页时返回`state=unavailable`、`error=verification_required`，不将其当作文章正文。请在同一专用profile中人工完成验证后再读取，工具不自动尝试验证码。
+
 输出目录由调用者指定并为每份输入隔离；省略时在`CONTENT_CACHE_DIR`（默认`tool/state/cache/`）下创建独立目录，调用者负责用完清理。工具不自动按保留期清理。图片/视频/扫描PDF最多8张，视频最长10分钟，音轨转写最多180秒；文本上限100000字符、网页和字幕上限24000字符。具体截断、采样范围见返回值；视频音轨失败时仍保留已取得画面。
 
 文件附件（`prepare_content` 的 `file`/`document`，以及 `read-document`）按实际内容分流：文件头识别PDF和常见图片，ZIP内部结构识别DOCX/XLSX，媒体文件通过ffmpeg的实际音视频流选择转写或视频采样。M4A等音频作为文件发送也可转写；带封面图片的音频仍按音频处理。文件改名不影响已识别格式，返回`detected_type`说明实际处理类型。未识别内容尝试读取文本；APK、普通压缩包和其他不支持的二进制文件明确报错，不执行附件。
