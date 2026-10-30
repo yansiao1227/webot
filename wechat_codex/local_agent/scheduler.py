@@ -33,25 +33,33 @@ class Scheduler:
     async def resolve_actions(self, job, tid, event, reply, generation, stage='', generate=None):
         seen = set()
         for _ in range(4):
+            controller = self.agent.reply_tasks.get(job['conversation'])
+            if controller is not None and controller.pending():
+                if generate is None:
+                    reply, generation = await self.agent.generate(tid, event)
+                else:
+                    reply, generation = await generate(event)
             action = generation.get('schedule_action')
             if action is None:
                 return reply, generation
             if event.get('is_scheduled_task'):
                 raise ValueError('定时执行不能递归管理任务')
+            source_id = generation.get('input_event_id', job['event_id'])
             canonical = json.dumps(action, ensure_ascii=False, sort_keys=True)
-            if canonical in seen:
+            if (source_id, canonical) in seen:
                 return self.receipt_text(receipt), {**generation, 'schedule_action': None, 'continue_reply': False, 'context_mode': 'none'}
-            seen.add(canonical)
+            seen.add((source_id, canonical))
             # 始终从持久原事件取身份，模型只能提出动作参数。
-            source = json.loads(job['event'])
+            source_row = self.store.db.execute('SELECT event FROM jobs WHERE event_id=?', (source_id,)).fetchone()
+            source = json.loads(source_row['event'])
             trusted = {k: source[k] for k in ('event_id', 'account', 'conversation_id', 'sender_id',
                 'direction', 'message_type', 'payload', 'mentions', 'captured_at') if k in source}
-            key = 'wechat_' + hashlib.sha256((job['event_id'] + ':' + canonical).encode()).hexdigest()
+            key = 'wechat_' + hashlib.sha256((source_id + ':' + canonical).encode()).hexdigest()
             receipt = await self.command(key, action, trusted)
             self.store.update(job['event_id'], 'generating', result={'schedule_result': receipt})
             current = {**event, 'schedule_result': receipt}
             if generate is None:
-                reply, generation = await self.agent.backend.generate(tid, current)
+                reply, generation = await self.agent.generate(tid, current)
             else:
                 reply, generation = await generate(current)
         return self.receipt_text(receipt), {**generation, 'schedule_action': None, 'continue_reply': False, 'context_mode': 'none'}

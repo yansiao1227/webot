@@ -7,6 +7,7 @@ from .mcp import allowed, context_allowed, MCPError
 from . import attachments
 from . import media
 from .codex_backend import ModelThreadBusy, ModelUnavailable
+from .steering import SteeringUnknown
 
 
 class Agent:
@@ -15,6 +16,7 @@ class Agent:
         self.stop = asyncio.Event()
         self.wake = asyncio.Event()
         self.active = {}
+        self.reply_tasks = {}
         self.errors = {}
         self.ready = asyncio.Event()
         from .scheduler import Scheduler
@@ -44,6 +46,8 @@ class Agent:
                 raise ValueError('消息身份或结构不匹配，不推进消费者')
         filtered = [e for e in events if context_allowed(e, self.config['account'], self.config['conversations'])]
         self.store.ingest(filtered, self.config['account'], self.config['conversations'])
+        for task in self.reply_tasks.values():
+            task.claim()
         if events:
             if not batch.get('ack_token'):
                 raise ValueError('消息批次缺少确认token')
@@ -63,6 +67,43 @@ class Agent:
                     pass
 
     async def process(self, job):
+        from .steering import ReplyTask
+        controller = self.reply_tasks.get(job['conversation'])
+        if controller is None or controller.job['event_id'] != job['event_id']:
+            controller = ReplyTask(self, job)
+        self.reply_tasks[job['conversation']] = controller
+        try:
+            await self._process(job)
+        finally:
+            state = self.store.db.execute('SELECT state FROM jobs WHERE event_id=?', (job['event_id'],)).fetchone()[0]
+            if state in ('accepted','unknown','failed','generation_unknown'):
+                self.reply_tasks.pop(job['conversation'], None)
+
+    async def generate(self, tid, event, progress=None):
+        async def call(current):
+            method = getattr(self.backend, 'generate_with_progress', None)
+            if progress is not None and callable(method):
+                return await method(tid, current, progress)
+            return await self.backend.generate(tid, current)
+        controller = self.reply_tasks.get(event['conversation_id'])
+        if controller is None or event.get('is_scheduled_task'):
+            return await call(event)
+        reply, generation = await controller.generate(tid, event, call)
+        controller.current = dict(event)
+        source_id = generation.get('request_event_id') or event['event_id']
+        if source_id not in controller.sources:
+            raise ValueError('模型控制动作引用了未授权的输入事件')
+        row = self.store.db.execute('SELECT state FROM jobs WHERE event_id=?', (controller.job['event_id'],)).fetchone()
+        self.store.update(controller.job['event_id'], row['state'], result={'input_sources':controller.sources})
+        return reply, {**generation, 'input_event_id': source_id, 'input_version': controller.version}
+
+    def input_event(self, job, event, generation):
+        controller = self.reply_tasks.get(job['conversation'])
+        if controller is None:
+            return event
+        return controller.sources.get(generation.get('input_event_id'), event)
+
+    async def _process(self, job):
         if (self.config.get('adaptive_context', True) and callable(getattr(self.backend,'create_task_thread',None))
                 and (job['state']=='pending' or json.loads(job['result'] or '{}').get('adaptive'))):
             from .staged import process
@@ -90,18 +131,19 @@ class Agent:
                         self.store.update(eid, 'pending', result={'conversation_read': {
                             'state': 'unknown', 'error': 'read_status_unconfirmed'}})
                 try:
-                    context = self.store.context(eid)
+                    context = self.store.context(event['event_id'])
                 except ValueError:
                     self.store.update(eid, 'failed', error='待补入上下文缺失或超过512KiB，请人工整理后恢复')
                     return
                 event['context'] = context
                 if event.get('reference'):
                     try:
-                        target = await self.mcp.call('resolve_reference', event_id=eid)
+                        target = await self.mcp.call('resolve_reference', event_id=event['event_id'])
                         event['reference_target'] = {k: target[k] for k in
                             ('event_id', 'message_type', 'sender_id', 'message_id') if k in target}
                         event['reference_target']['payload'] = {
                             k: target['payload'][k] for k in ('text', 'name', 'mime', 'size') if k in target['payload']}
+                        event['reference_resource'] = target
                     except MCPError:
                         target = None
                         event['reference_error'] = '无法精确找到原生引用目标，请重新发送并引用；不要猜测附近消息'
@@ -115,17 +157,28 @@ class Agent:
                 self.store.set_thread(job['conversation'], thread_id)
                 self.store.update(eid, 'generating')
                 try:
-                    reply, generation = await self.backend.generate(thread_id, event)
+                    reply, generation = await self.generate(thread_id, event)
                     reply, generation = await self.scheduler.resolve_actions(job, thread_id, event, reply, generation)
-                    if generation.get('read_attachment'):
-                        if target is None or target.get('message_type') in ('text', 'unknown'):
+                    controller = self.reply_tasks.get(job['conversation'])
+                    if controller is not None and controller.current is not None:
+                        event.clear(); event.update(controller.current)
+                    if event['event_id'] != eid:
+                        target = event.get('reference_resource')
+                    while generation.get('read_attachment'):
+                        source = self.input_event(job, event, generation)
+                        target = source.get('reference_resource', target if source['event_id']==eid else None)
+                        already_read = any(r['event_id']==source['event_id'] for r in event.get('resource_results', []))
+                        if target is None or target.get('message_type') in ('text', 'unknown') or already_read:
                             reply = '请使用微信“引用”选中要处理的内容，并说明处理要求。'
+                            generation['read_attachment'] = False
                         else:
                             self.store.update(eid, 'generating', result={'attachment_plan': generation})
                             followup = dict(event)
                             followup.pop('context', None)
+                            followup.pop('attachment', None)
+                            followup.pop('attachment_error', None)
                             try:
-                                followup['attachment'] = await attachments.fetch(self.mcp, eid, target,
+                                followup['attachment'] = await attachments.fetch(self.mcp, source['event_id'], target,
                                     self.store.path / 'resources', self.config.get('resource_timeout', 60))
                                 followup['attachment'] = await asyncio.to_thread(media.prepare, followup['attachment'],
                                     {'read_source': generation.get('read_source', False),
@@ -136,10 +189,12 @@ class Agent:
                             except (MCPError, OSError, KeyError) as error:
                                 reason = error.strerror if isinstance(error, OSError) else str(error)
                                 followup['attachment_error'] = '资源获取或协议校验失败：' + type(error).__name__ + '：' + str(reason or '未知原因')[:500]
-                            reply, generation = await self.backend.generate(thread_id, followup)
+                            followup['attachment_event_id'] = source['event_id']
+                            followup['resource_results'] = event.get('resource_results', []) + [
+                                {'event_id':source['event_id'], **{k:followup[k] for k in ('attachment','attachment_error') if k in followup}}]
+                            reply, generation = await self.generate(thread_id, followup)
                             reply, generation = await self.scheduler.resolve_actions(job, thread_id, followup, reply, generation, stage='attachment')
-                            if generation.get('read_attachment'):
-                                reply = '引用的内容本轮无法完成处理，请检查后重新引用。'
+                            event.clear(); event.update(controller.current or followup)
                 except ModelUnavailable as error:
                     reply=error.reply
                     generation=error.details()
@@ -168,12 +223,16 @@ class Agent:
                         self.store.update(eid, 'generating', result={'conversation_read': read_result})
                     except (MCPError, TimeoutError):
                         pass  # 已读状态异常不能改变已经生成的回答。
-                self.store.update(eid, 'generated', reply=reply, result={'generation': generation}, context=context)
+                self.store.update(eid, 'generated', reply=reply, result={'generation': generation, 'task_input':event}, context=event.get('context',context))
                 state = 'generated'
             if state == 'generated':
                 if self.stop.is_set():
                     return  # 持久保留尚未发送的回答，等待显式重启。
                 await self.verify()  # 每次发送前检查账号、门禁及是否存在竞争代理。
+                controller = self.reply_tasks.get(job['conversation'])
+                if controller is not None and not await controller.before_send(True):
+                    current = controller.current or json.loads(job['result'] or '{}').get('task_input', event)
+                    return await self._process({**job, 'state':'pending', 'event':json.dumps(current)})
                 self.store.update(eid, 'sending')  # 请求离开本进程前先提交事务。
                 try:
                     result = await self.mcp.call('reply_text', event_id=eid, text=reply)
@@ -185,6 +244,8 @@ class Agent:
                 await self.reconcile(eid)
         except asyncio.CancelledError:
             raise
+        except SteeringUnknown:
+            self.store.update(eid, 'generation_unknown', error='引导接纳结果待核查，禁止自动重投')
         except Exception as error:
             # 恢复失败时不得静默创建其他线程，
             # 也不得回退到其他收件人或不受门禁保护的 HTTP 发送。
@@ -214,7 +275,7 @@ class Agent:
             await self.scheduler.tick()
             if time.monotonic() - last_cleanup >= 30:
                 self.store.prune()
-                protected = [r[0] for r in self.store.db.execute("SELECT event_id FROM jobs WHERE state!='accepted'")]
+                protected = [r[0] for r in self.store.db.execute("SELECT event_id FROM jobs WHERE state NOT IN ('accepted','merged_done')")]
                 attachments.prune(self.store.path / 'resources', protected)
                 last_cleanup = time.monotonic()
             for cid, task in list(self.active.items()):

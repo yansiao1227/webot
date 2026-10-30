@@ -5,6 +5,7 @@ import time
 from .mcp import allowed,MCPError
 from .codex_backend import ModelThreadBusy, ModelUnavailable
 from .progress import ProgressDeliveryError
+from .steering import SteeringUnknown
 from . import attachments,media
 
 MAX_PARTS = 64
@@ -65,13 +66,17 @@ async def process(agent,job):
         event['_tool_timeout']=agent.config.get('tool_timeout',60)
         for key, default in (('startup_timeout',60),('generation_idle_timeout',30),('turn_timeout',600)):
             event['_'+key]=agent.config.get(key,default)
-        method=getattr(agent.backend,'generate_with_progress',None)
         async def call(current):
-            if callable(method):return await method(tid,current,progress)
-            return await agent.backend.generate(tid,current)
+            current['reply_progress']=[p['text'] for p in parts if p['state']=='accepted']
+            current['remaining_parts']=MAX_PARTS-details.get('part_index',0)
+            return await agent.generate(tid,current,progress)
         reply,generation=await call(event)
-        return await agent.scheduler.resolve_actions(job,tid,event,reply,generation,
+        result=await agent.scheduler.resolve_actions(job,tid,event,reply,generation,
             stage=str(details.get('part_index',0)), generate=call)
+        controller=agent.reply_tasks.get(job['conversation'])
+        if controller is not None and controller.current is not None:
+            event.clear();event.update(controller.current)
+        return result
     try:
         if state=='pending':
             details['part_started_at']=time.time()
@@ -86,6 +91,7 @@ async def process(agent,job):
                     target=await agent.mcp.call('resolve_reference',event_id=eid)
                     event['reference_target']={k:target[k] for k in ('event_id','message_type','sender_id','message_id') if k in target}
                     event['reference_target']['payload']={k:target['payload'][k] for k in ('text','name','mime','size') if k in target['payload']}
+                    event['reference_resource']=target
                 except MCPError:event['reference_error']='无法精确找到原生引用目标，请重新引用，不能猜测附近附件'
             conversation=store.conversation(job['conversation'])
             # 保留现有逻辑会话与线程的映射；它已不再
@@ -103,6 +109,8 @@ async def process(agent,job):
             # 已生成草稿或已提交发送只恢复投递，不依赖模型线程恢复。
             tid=details['task_thread_id']
             event=details['task_input']
+            if event['event_id']==eid and details.get('attachment_target'):
+                event.setdefault('reference_resource',details['attachment_target'])
         while not agent.stop.is_set():
             index=details.get('part_index',0)
             if state=='continuing':
@@ -113,7 +121,7 @@ async def process(agent,job):
                     previous=details.get('generation',{})
                     mode=previous.get('context_mode','none')
                     if mode!='none':
-                        event['context']=store.select_context(eid,mode=mode,limit=previous.get('context_limit'),
+                        event['context']=store.select_context(event['event_id'],mode=mode,limit=previous.get('context_limit'),
                             query=previous.get('context_query',''))
                     else:event.pop('context',None)
                     event['next_step']=previous.get('next_step','继续完成尚未完成的部分')
@@ -127,16 +135,27 @@ async def process(agent,job):
                 try:
                     before_progress=len(parts)
                     reply,generation=await generate(tid,event)
-                    if generation.get('read_attachment'):
-                        if not attachment_request or event.get('attachment') or event.get('attachment_error'):
+                    while generation.get('read_attachment'):
+                        source=agent.input_event(job,event,generation)
+                        target=source.get('reference_resource')
+                        attachment_request=target is not None and target.get('message_type') not in ('text','unknown')
+                        already_read=any(r['event_id']==source['event_id'] for r in event.get('resource_results',[])) or (event.get('attachment_event_id',event['event_id'])==source['event_id'] and (event.get('attachment') or event.get('attachment_error')))
+                        if not attachment_request or already_read:
                             reply='请用微信“引用”选中要处理的内容，并说明处理要求。'
+                            generation['read_attachment']=False
                             generation['continue_reply']=False;generation['context_mode']='none'
                         else:
                             if len(parts)==before_progress:
                                 await progress('我先读取你引用的内容，再根据实际内容分析。',
                                     {'key':str(generation.get('turn_id',tid))+':attachment','kind':'attachment_decision'})
+                            controller=agent.reply_tasks.get(job['conversation'])
+                            if controller is not None and controller.pending():
+                                reply,generation=await generate(tid,event)
+                                continue
+                            event.pop('attachment',None)
+                            event.pop('attachment_error',None)
                             try:
-                                resource=await attachments.fetch(agent.mcp,eid,target,store.path/'resources',
+                                resource=await attachments.fetch(agent.mcp,source['event_id'],target,store.path/'resources',
                                     agent.config.get('resource_timeout',60))
                                 event['attachment']=await asyncio.to_thread(media.prepare,resource,
                                     {'read_source':generation.get('read_source',False),
@@ -146,11 +165,11 @@ async def process(agent,job):
                                 reason = error.strerror if isinstance(error, OSError) else str(error)
                                 event['attachment_error']='附件获取或解析未完成：'+type(error).__name__+'：'+str(reason or '未知原因')[:500]
                             store.update(eid,'generating',result={'task_input':event})
+                            event['attachment_event_id']=source['event_id']
+                            event['resource_results']=event.get('resource_results',[])+[
+                                {'event_id':source['event_id'],**{k:event[k] for k in ('attachment','attachment_error') if k in event}}]
                             event['_model_timeout']=agent.config.get('model_timeout',180)
                             reply,generation=await generate(tid,event)
-                            if generation.get('read_attachment'):
-                                reply='本轮引用的内容未能完成处理，请检查后重新引用。'
-                                generation['continue_reply']=False;generation['context_mode']='none'
                 except ModelUnavailable as error:
                     reply=error.reply
                     generation=error.details()
@@ -190,6 +209,10 @@ async def process(agent,job):
             if agent.stop.is_set():return
             if state=='generated':
                 await agent.verify()
+                controller=agent.reply_tasks.get(job['conversation'])
+                if controller is not None and not await controller.before_send(details['part_final']):
+                    state='continuing'
+                    continue
                 store.update(eid,'sending')
                 try:
                     operation=await agent.mcp.call('reply_text_part',event_id=eid,part_index=index,
@@ -219,6 +242,8 @@ async def process(agent,job):
             state='continuing'
     except asyncio.CancelledError:
         store.update(eid,'generation_unknown',error='分段任务被中断，请核对原轮次');raise
+    except SteeringUnknown:
+        store.update(eid,'generation_unknown',error='引导接纳结果待核查，禁止自动重投')
     except Exception as error:
         row=store.db.execute('SELECT state FROM jobs WHERE event_id=?',(eid,)).fetchone()
         state=row[0] if row else ''

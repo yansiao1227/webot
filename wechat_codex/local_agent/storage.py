@@ -28,6 +28,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS context_progress(conversation TEXT PRIMARY KEY,epoch INTEGER NOT NULL,
                 through_seq INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS seen_events(event_id TEXT PRIMARY KEY,digest TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS steering(event_id TEXT PRIMARY KEY,root_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,state TEXT NOT NULL,thread_id TEXT,turn_id TEXT);
         ''')
         from .schedule_store import initialize
         initialize(self.db)
@@ -149,13 +151,21 @@ class Store:
         with self.tx() as db:
             # 会话存在未完成或状态未知的工作时，保留整个会话直到解决。
             db.execute('''DELETE FROM messages WHERE created<? AND NOT EXISTS
-                (SELECT 1 FROM jobs WHERE conversation=messages.conversation AND state!='accepted')''', (cutoff,))
-            db.execute("DELETE FROM jobs WHERE state='accepted' AND created<?", (cutoff,))
+                (SELECT 1 FROM jobs WHERE conversation=messages.conversation AND state NOT IN ('accepted','merged_done'))''', (cutoff,))
+            db.execute("""DELETE FROM steering WHERE root_id IN (SELECT event_id FROM jobs WHERE state='accepted' AND created<?)
+                AND root_id NOT IN (SELECT s.root_id FROM steering s JOIN jobs j USING(event_id) WHERE j.created>=?)""", (cutoff,cutoff))
+            db.execute("""DELETE FROM jobs WHERE state IN ('accepted','merged_done') AND created<?
+                AND event_id NOT IN (SELECT root_id FROM steering UNION SELECT event_id FROM steering)""", (cutoff,))
 
     def recover(self):
         # 被中断的模型轮次可能已向线程追加内容。
         # 不得生成第二个回答或盲目继续该会话。
         with self.tx() as db:
+            db.execute("UPDATE steering SET state='unknown' WHERE state='submitting'")
+            db.execute("UPDATE jobs SET state='generation_unknown',error='引导接纳结果待核查' WHERE event_id IN (SELECT root_id FROM steering WHERE state='unknown')")
+            # 尚未完成的关联任务不能在重启后脱离原模型执行状态独立重跑。
+            db.execute("UPDATE jobs SET state='generation_unknown',error='引导任务执行中断，需核查原线程' WHERE state IN ('pending','continuing') AND event_id IN (SELECT root_id FROM steering)")
+            db.execute("UPDATE jobs SET state='generation_unknown',error='仍有未补入的引导，需核查原任务' WHERE state='generated' AND event_id IN (SELECT root_id FROM steering WHERE state='pending')")
             db.execute("UPDATE jobs SET state='generation_unknown',error='进程中断，模型轮次结果待核查',updated=? WHERE state='generating'", (time.time(),))
             db.execute("UPDATE conversations SET paused=1 WHERE EXISTS (SELECT 1 FROM jobs WHERE conversation=conversations.id AND epoch=conversations.epoch AND state IN ('generation_unknown','unknown','failed'))")
 
@@ -163,7 +173,7 @@ class Store:
         rows = self.db.execute('''SELECT j.* FROM jobs j JOIN conversations c ON c.id=j.conversation
             WHERE c.paused=0 AND j.epoch=c.epoch AND j.state IN ('pending','generated','sending','continuing')
             AND NOT EXISTS(SELECT 1 FROM jobs older WHERE older.conversation=j.conversation
-                AND older.epoch=j.epoch AND older.seq<j.seq AND older.state!='accepted')
+                AND older.epoch=j.epoch AND older.seq<j.seq AND older.state NOT IN ('accepted','merged_done'))
             ORDER BY j.seq''').fetchall()
         return [dict(row) for row in rows if row['conversation'] not in exclude]
 
@@ -189,10 +199,12 @@ class Store:
                            (cid, context['epoch'], context['through_seq']))
             if state in ('generation_unknown', 'unknown', 'failed'):
                 db.execute('UPDATE conversations SET paused=1 WHERE id=(SELECT conversation FROM jobs WHERE event_id=?)', (eid,))
+            if state == 'accepted':
+                db.execute("UPDATE jobs SET state='merged_done',updated=? WHERE event_id IN (SELECT event_id FROM steering WHERE root_id=?)", (time.time(), eid))
 
     def reset(self, cid):
         with self.tx() as db:
-            if db.execute("SELECT 1 FROM jobs WHERE conversation=? AND state IN ('pending','generating','generated','sending')", (cid,)).fetchone():
+            if db.execute("SELECT 1 FROM jobs WHERE conversation=? AND state IN ('pending','generating','generated','sending','continuing')", (cid,)).fetchone():
                 raise ValueError('该会话仍有排队或执行中的消息，不能重置')
             changed = db.execute('UPDATE conversations SET thread_id=NULL,epoch=epoch+1,paused=0,updated=? WHERE id=?', (time.time(), cid)).rowcount
             if not changed:

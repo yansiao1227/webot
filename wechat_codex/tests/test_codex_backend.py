@@ -6,15 +6,55 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, patch
-from local_agent.runtime import atomic_json
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_agent.runtime import atomic_json
 from local_agent.codex_backend import CodexBackend, runtime_overrides, ModelTimeout, ModelThreadBusy, ModelUnavailable, parse_completed_output
 from fakes import event
 from local_agent.progress import ProgressDeliveryError
 
 
+class SDKWireTests(unittest.TestCase):
+    def test_real_sdk_steer_input_is_serializable_without_external_message(self):
+        try:
+            from openai_codex._inputs import _normalize_run_input, _to_wire_input
+        except ImportError:
+            self.skipTest('optional local Codex SDK absent')
+        wire=_to_wire_input(_normalize_run_input(CodexBackend.steering_message(event('guide',text='新要求'))))
+        self.assertEqual(wire[0]['type'],'text')
+        text=wire[0]['text']
+        self.assertTrue(text.startswith('wechat_message 外部请求数据：\n'))
+        self.assertEqual(json.loads(text.split('\n',1)[1])['event_id'],'guide')
+
+
 class BackendTests(unittest.IsolatedAsyncioTestCase):
+    async def test_steer_uses_exact_active_handle_and_reuses_message_envelope(self):
+        await self.backend.ensure_thread('peer')
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def run():
+            entered.set()
+            await release.wait()
+            return SimpleNamespace(status='completed',id='turn-1',duration_ms=10,items=[],final_response='结果')
+        self.handle.run=run
+        self.handle.steer=AsyncMock(return_value=SimpleNamespace(turn_id='turn-1'))
+        self.backend.turn_changed['thread-1']=lambda: None
+        running=asyncio.create_task(self.backend.generate('thread-1',event()))
+        class Rejected(Exception): pass
+        try:
+            await asyncio.wait_for(entered.wait(),1)
+            with patch.dict(sys.modules,{'openai_codex.errors':SimpleNamespace(InvalidRequestError=Rejected)}):
+                self.assertFalse(await self.backend.steer('thread-1','other-turn',event('wrong')))
+                self.handle.steer.assert_not_awaited()
+                self.assertTrue(await self.backend.steer('thread-1','turn-1',event('guide',text='新要求')))
+                self.assertIn('新要求',str(self.handle.steer.await_args.args[0]))
+                self.assertIn('wechat_message',str(self.handle.steer.await_args.args[0]))
+                self.handle.steer.side_effect=Rejected()
+                self.assertFalse(await self.backend.steer('thread-1','turn-1',event('rejected')))
+        finally:
+            release.set()
+            await running
+        self.assertEqual(self.backend.active_turns,{})
+        self.handle.interrupt.assert_not_awaited()
+
     async def test_completed_plain_text_is_reused_without_second_turn(self):
         await self.backend.ensure_thread('peer')
         self.thread.run.return_value = SimpleNamespace(status='completed', id='turn', duration_ms=10,

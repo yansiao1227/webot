@@ -66,10 +66,18 @@ def choose(store,event_id,mode=None,limit=None,query=''):
         value={k:e[k] for k in ('event_id','sender_id','message_id','direction','message_type','captured_at','reference') if k in e}
         value['payload']=({'text':e['payload']['text'][:3000]} if e['message_type']=='text' else
             {k:e['payload'][k] for k in ('name','mime','size') if k in e['payload']})
-        if row['state']=='accepted' and row['reply']:
-            r=json.loads(row['result']or'{}')
+        answer_row=row
+        answer_id=e['event_id']
+        if row['state']=='merged_done':
+            root=store.db.execute('SELECT j.* FROM steering s JOIN jobs j ON j.event_id=s.root_id WHERE s.event_id=?', (answer_id,)).fetchone()
+            if root is not None:
+                answer_row=root
+                answer_id=root['event_id']
+        if answer_row['state']=='accepted' and answer_row['reply']:
+            value['_reply_root']=answer_id
+            r=json.loads(answer_row['result']or'{}')
             # 从已提交的回复段重建多段回答。
-            answer='\n'.join(p['text'] for p in r.get('parts',[]) if p.get('state')=='accepted') or row['reply']
+            answer='\n'.join(p['text'] for p in r.get('parts',[]) if p.get('state')=='accepted') or answer_row['reply']
             value['assistant_reply']=answer[:4000]
         selected.append((row['seq'],value))
     if anchor is not None:
@@ -85,5 +93,12 @@ def choose(store,event_id,mode=None,limit=None,query=''):
         messages.append((seq,value));used+=size
         if anchor is None and len(messages)>=limit:break
     result['messages']=[value for seq,value in sorted(messages,key=lambda item:item[0])]
+    answered=set()
+    for value in reversed(result['messages']):
+        answer_id=value.pop('_reply_root',None)
+        if answer_id in answered:
+            value.pop('assistant_reply',None)
+        elif answer_id is not None:
+            answered.add(answer_id)
     result['selection']['bytes']=used
     return result
