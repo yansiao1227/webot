@@ -170,10 +170,22 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('wxid_participant_A', str(self.thread.turn.call_args.args[0]))
         self.assertIn('https://', reply)
         self.assertEqual(info['tool_calls'], 3)
+        self.assertEqual(info['search_calls'], 1)
         self.assertNotIn('effort', self.thread.run.call_args.kwargs)
         self.thread.run.return_value.status = 'failed'
         with self.assertRaises(RuntimeError):
             await self.backend.generate('thread-1', event())
+
+    async def test_connected_search_evidence_does_not_count_unrelated_mcp(self):
+        await self.backend.ensure_thread('peer')
+        items = [dict(type='mcpToolCall', server='codex_apps', tool=name)
+                 for name in ('search_service.web_run', 'gmail.search')]
+        self.thread.run.return_value = SimpleNamespace(status='completed', id='turn', duration_ms=10,
+            items=[SimpleNamespace(model_dump=lambda value=value, **kwargs: value) for value in items],
+            final_response=json.dumps({'reply': '检索完成'}))
+        _, info = await self.backend.generate('thread-1', event())
+        self.assertEqual(info['tool_calls'], 2)
+        self.assertEqual(info['search_calls'], 1)
 
 
     async def test_timeout_interrupts_exact_turn_and_observes_terminal_state(self):

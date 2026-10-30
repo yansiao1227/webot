@@ -2,6 +2,12 @@
 import asyncio
 
 
+def is_web_search(item):
+    return (item.get('type') == 'webSearch' or
+            (item.get('type') == 'mcpToolCall' and item.get('server') == 'codex_apps' and
+             item.get('tool') == 'search_service.web_run'))
+
+
 class ProgressDeliveryError(Exception):
     """进度发送未确认时停止模型，不跳过该段索引。"""
 
@@ -139,7 +145,7 @@ class DecisionClock:
                 self.decision_count += 1
                 self.changed.set()
                 if not self.commentary_for_tool:
-                    text = self.TOOL_TEXT[kind]
+                    text = self.TOOL_TEXT['webSearch'] if is_web_search(item) else self.TOOL_TEXT[kind]
                     if kind == 'webSearch':
                         action = (item.get('action') or {}).get('type')
                         if action == 'openPage':

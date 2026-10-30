@@ -66,6 +66,8 @@ SDK 版本由 `requirements.txt` 固定。语音识别使用本机 CPU 和预先
 
 适配器通过官方 Python SDK 使用 Codex 登录与配置，继承运行时支持的工具、技能、MCP 和插件，并启用实时搜索。模型推理可能访问云端，工具调用可能产生实际操作；桌面应用专属工具是否可用取决于 CLI/SDK 运行时。
 
+联网时优先使用运行时已连接的 Search Service；没有该工具时使用默认网页工具。助手指令要求通过 `functions.exec` 调用的单次搜索或网页请求在20秒内返回，失败时最多切换另一可用通道一次；没有可用结果则说明联网失败。该截止由模型执行工具调用实现，外层仍以工具和整轮时限兜底。搜索通道是否可用取决于当前运行时和插件连接。
+
 ## 启动、查看和停止
 
 整套服务使用根目录 `start_wechat.cmd`、`status_wechat.cmd`、`stop_wechat.cmd`，详见[管理说明](../scripts/wechat_stack/README.md)。单独管理本模块：
@@ -97,6 +99,8 @@ python -B -X utf8 -W error::ResourceWarning .\wechat_codex\run_tests.py
 ```
 
 需要单独检查 SDK 或联网工具时，可运行 `validation/sdk_validation.py` 或 `validation/capabilities_validation.py`；这些命令会调用真实 Codex 服务，不连接微信收发接口。
+
+联网检查沿用 `--state-dir` 对应的模型、CLI 和时限配置，使用独立验证线程；`capabilities_validation.py --request '要检索的公开问题'` 可指定搜索内容。报告根据原生网页工具或 Search Service 的实际调用记录判断是否执行过搜索，不把其他 MCP 调用当作搜索证据。
 
 
 手动验证脚本集中在 `wechat_codex/validation/`，与 `tests/` 中的本地回归分开；验证输出保存在 `wechat_codex/state/`。以下命令在项目根目录执行：

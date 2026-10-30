@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock
 
-from local_agent.progress import DecisionClock, ProgressDeliveryError
+from local_agent.progress import DecisionClock, ProgressDeliveryError, is_web_search
 
 
 def notification(method, kind, item_id, turn='turn', **fields):
@@ -12,6 +12,24 @@ def notification(method, kind, item_id, turn='turn', **fields):
 
 
 class ProgressTests(unittest.IsolatedAsyncioTestCase):
+    async def test_connected_search_has_search_notice_and_bounded_tool_budget(self):
+        callback = AsyncMock()
+        clock = DecisionClock('turn', 1, .03, callback)
+        search = dict(server='codex_apps', tool='search_service.web_run')
+        await clock.observe(notification('item/started', 'mcpToolCall', 'search', **search))
+        self.assertEqual(callback.call_args.args[0], clock.TOOL_TEXT['webSearch'])
+        self.assertTrue(is_web_search({'type':'mcpToolCall', **search}))
+        self.assertFalse(is_web_search({'type':'mcpToolCall', 'server':'codex_apps', 'tool':'gmail.search'}))
+        self.assertFalse(is_web_search({'type':'mcpToolCall', **search, 'server':'other'}))
+        task = asyncio.create_task(asyncio.sleep(.3))
+        try:
+            with self.assertRaises(TimeoutError):
+                await clock.wait(task)
+            self.assertEqual(clock.timeout_stage, 'tool')
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
     async def test_long_stream_notice_is_delayed_and_sent_once(self):
         callback=AsyncMock()
         clock=DecisionClock('turn',1,1,callback,generation_idle_timeout=2)
