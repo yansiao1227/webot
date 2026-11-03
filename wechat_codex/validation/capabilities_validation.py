@@ -29,7 +29,7 @@ async def main(args):
             'conversation_id': 'validation',
             'payload': {'text': args.request + '请实际联网搜索并给出来源链接。只搜索和读取公开网页，不读写本地文件，不运行命令，不操作微信或其他应用。'},
             **{'_' + key: config.get(key, default) for key, default in (
-                ('decision_timeout', 30), ('tool_timeout', 60), ('startup_timeout', 60),
+                ('decision_timeout', 60), ('tool_timeout', 60), ('startup_timeout', 60),
                 ('generation_idle_timeout', 30), ('turn_timeout', 600))},
         }, on_progress)
         # 证据包含运行时条目类型，不能仅依赖模型自身声明。

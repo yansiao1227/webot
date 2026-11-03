@@ -112,7 +112,7 @@ class Agent:
         event = json.loads(job['event'])
         # 仅使用操作员配置，消息正文不能更改时限。
         event.pop('_model_timeout', None)
-        for key, default in (('startup_timeout',60),('generation_idle_timeout',30),('turn_timeout',600)):
+        for key, default in (('decision_timeout',60),('startup_timeout',60),('generation_idle_timeout',30),('turn_timeout',600)):
             event['_'+key] = self.config.get(key,default)
         if event['conversation_id'] in self.config.get('model_timeouts', {}):
             event['_model_timeout'] = self.config['model_timeouts'][event['conversation_id']]

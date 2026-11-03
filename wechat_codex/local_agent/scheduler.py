@@ -255,7 +255,7 @@ class Scheduler:
                                  'is_scheduled_task': True, 'scheduled_at': display(run['planned']),
                                  'context': {'saved_text': task['context']},
                                  'reply_progress': [p['text'] for p in details['parts']], 'remaining_parts': 64 - index,
-                                 '_decision_timeout': self.agent.config.get('decision_timeout', 30),
+                                 '_decision_timeout': self.agent.config.get('decision_timeout', 60),
                                  '_tool_timeout': self.agent.config.get('tool_timeout', 60)}
                         if details.get('next_step'):
                             event['next_step'] = details['next_step']
