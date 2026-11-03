@@ -28,7 +28,8 @@ class DecisionClock:
     }
 
     def __init__(self, turn_id, decision_timeout, tool_timeout, callback=None, *,
-                 startup_deadline=None, generation_idle_timeout=30, total_deadline=None):
+                 startup_deadline=None, generation_idle_timeout=30, total_deadline=None,
+                 reasoning_timeout=180):
         self.loop = asyncio.get_running_loop()
         self.turn_id = turn_id
         self.decision_timeout, self.tool_timeout = decision_timeout, tool_timeout
@@ -37,6 +38,8 @@ class DecisionClock:
         self.startup_deadline = startup_deadline
         self.total_deadline = total_deadline
         self.generation_idle_timeout = generation_idle_timeout
+        self.reasoning_timeout = reasoning_timeout
+        self.reasoning_deadline = None
         self.generating = False
         self.stream_started_at = None
         self.stream_notice_sent = False
@@ -58,7 +61,8 @@ class DecisionClock:
         elif self.startup_deadline is not None:
             deadlines.append(self.startup_deadline)
         else:
-            deadlines.extend(self.tools.values() if self.tools else [self.idle_deadline])
+            deadlines.extend(self.tools.values() if self.tools else
+                             [self.reasoning_deadline if self.reasoning_deadline is not None else self.idle_deadline])
         return min(deadlines)
 
     def ready(self):
@@ -66,6 +70,15 @@ class DecisionClock:
             self.startup_deadline = None
             self.idle_deadline = self.loop.time() + self.decision_timeout
             self.changed.set()
+
+    def reasoning(self):
+        self.ready()
+        if self.tools or self.generating or self.reasoning_deadline is not None:
+            return
+        # 推理只切换预算，不从每个事件重新计时。即使只有 completed
+        # 事件，也从当前决定等待阶段开始计算，避免重复推理无限续期。
+        self.reasoning_deadline = self.idle_deadline - self.decision_timeout + self.reasoning_timeout
+        self.changed.set()
 
     async def publish(self, text, key, kind, *, streaming=False):
         if not self.callback:
@@ -76,6 +89,7 @@ class DecisionClock:
             await asyncio.wait_for(self.callback(text, {'key': key, 'kind': kind}), 15)
         finally:
             self.sending_deadline = None
+            self.reasoning_deadline = None
             self.idle_deadline = self.loop.time() + (self.generation_idle_timeout if streaming else self.decision_timeout)
             self.changed.set()
 
@@ -87,12 +101,17 @@ class DecisionClock:
         method = notification.method
         item = value.get('item') or {}
         kind, item_id = item.get('type'), item.get('id')
+        if method in ('item/reasoning/textDelta', 'item/reasoning/summaryTextDelta'):
+            if value.get('itemId') and isinstance(value.get('delta'), str) and value['delta']:
+                self.reasoning()
+            return
         # 增量使用顶层 itemId/delta，而不是 item 对象。不得发布
         # 未完成的 schema JSON，也不能对连续文本片段去重。
         if method == 'item/agentMessage/delta':
             delta = value.get('delta')
             if value.get('itemId') and isinstance(delta, str) and delta:
                 self.ready()
+                self.reasoning_deadline = None
                 self.generating = True
                 if self.stream_started_at is None:
                     self.stream_started_at = self.loop.time()
@@ -118,6 +137,8 @@ class DecisionClock:
         if identity in self.seen:
             return
         self.seen.add(identity)
+        if kind == 'reasoning' and method in ('item/started', 'item/completed'):
+            self.reasoning()
         if method == 'item/completed' and kind == 'agentMessage':
             self.stream_started_at = None
         if method == 'item/completed' and kind == 'agentMessage' and item.get('phase') in ('commentary', 'partial_answer'):
@@ -129,6 +150,7 @@ class DecisionClock:
                 if self.first_decision_seconds is None:
                     self.first_decision_seconds = round(self.loop.time() - self.started, 3)
                 await self.publish(text, self.turn_id + ':' + item_id, 'commentary')
+                self.reasoning_deadline = None
                 self.commentary_for_tool = True
                 self.idle_deadline = self.loop.time() + self.decision_timeout
                 self.generating = False
@@ -136,6 +158,7 @@ class DecisionClock:
                 self.changed.set()
         if kind in self.TOOL_TEXT:
             if method == 'item/started':
+                self.reasoning_deadline = None
                 self.generating = False
                 self.stream_started_at = None
                 self.tool_started_count += 1
@@ -158,6 +181,7 @@ class DecisionClock:
                 self.commentary_for_tool = False
             elif method == 'item/completed':
                 self.tools.pop(item_id, None)
+                self.reasoning_deadline = None
                 self.generating = False
                 self.stream_started_at = None
                 self.idle_deadline = self.loop.time() + self.decision_timeout
@@ -174,7 +198,8 @@ class DecisionClock:
                     self.timeout_stage = ('total' if self.total_deadline is not None and self.loop.time() >= self.total_deadline
                                           else 'progress_send' if self.sending_deadline is not None
                                           else 'startup' if self.startup_deadline is not None
-                                          else 'tool' if self.tools else 'generation' if self.generating else 'decision')
+                                          else 'tool' if self.tools else 'reasoning' if self.reasoning_deadline is not None
+                                          else 'generation' if self.generating else 'decision')
                     raise TimeoutError('decision_or_tool_timeout')
             finally:
                 changed.cancel()

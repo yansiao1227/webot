@@ -12,6 +12,72 @@ def notification(method, kind, item_id, turn='turn', **fields):
 
 
 class ProgressTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reasoning_can_outlast_decision_budget_without_publishing_private_text(self):
+        callback = AsyncMock()
+        clock = DecisionClock('turn', .04, .3, callback, reasoning_timeout=.2)
+        async def run():
+            # 重放故障顺序：输入就绪，随后才收到推理完成事件。
+            await clock.observe(notification('item/completed','functionCallOutput','input',name='wechat_message'))
+            await asyncio.sleep(.02)
+            await clock.observe(notification('item/completed','reasoning','thought',text='private'))
+            await asyncio.sleep(.06)
+            return 'final'
+        self.assertEqual(await clock.wait(asyncio.create_task(run())), 'final')
+        callback.assert_not_awaited()
+
+    async def test_repeated_reasoning_cannot_extend_its_budget_or_total_limit(self):
+        for total, stage in ((None, 'reasoning'), (.04, 'total')):
+            callback = AsyncMock()
+            loop = asyncio.get_running_loop()
+            clock = DecisionClock('turn', .03, .3, callback, reasoning_timeout=.09,
+                total_deadline=loop.time()+total if total else None)
+            original = clock.idle_deadline - clock.decision_timeout + clock.reasoning_timeout
+            async def run():
+                for i in range(50):
+                    await clock.observe(notification('item/started','reasoning',str(i)))
+                    await clock.observe(SimpleNamespace(method='item/reasoning/textDelta',
+                        payload={'turnId':'turn','itemId':str(i),'delta':'private'}))
+                    self.assertAlmostEqual(clock.reasoning_deadline, original)
+                    await asyncio.sleep(.01)
+            task = asyncio.create_task(run())
+            try:
+                with self.assertRaises(TimeoutError):
+                    await clock.wait(task)
+                self.assertEqual(clock.timeout_stage, stage)
+                callback.assert_not_awaited()
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+    async def test_reasoning_does_not_override_tool_generation_or_foreign_turn(self):
+        clock = DecisionClock('turn', 1, .3, reasoning_timeout=2)
+        await clock.observe(notification('item/started','reasoning','foreign',turn='other'))
+        await clock.observe(SimpleNamespace(method='item/reasoning/textDelta',
+            payload={'turnId':'turn','itemId':'empty','delta':''}))
+        self.assertIsNone(clock.reasoning_deadline)
+        await clock.observe(notification('item/started','reasoning','thought'))
+        self.assertIsNotNone(clock.reasoning_deadline)
+        await clock.observe(notification('item/started','webSearch','search'))
+        deadline = clock.deadline()
+        await clock.observe(notification('item/completed','reasoning','late'))
+        self.assertIsNone(clock.reasoning_deadline)
+        self.assertEqual(clock.deadline(), deadline)
+        await clock.observe(notification('item/completed','webSearch','search'))
+        await clock.observe(SimpleNamespace(method='item/agentMessage/delta',
+            payload={'turnId':'turn','itemId':'answer','delta':'x'}))
+        deadline = clock.deadline()
+        await clock.observe(notification('item/started','reasoning','late-2'))
+        self.assertEqual(clock.deadline(), deadline)
+        self.assertIsNone(clock.reasoning_deadline)
+
+    async def test_commentary_ends_reasoning_and_next_stage_has_fresh_budget(self):
+        clock = DecisionClock('turn', 1, 1, AsyncMock(), reasoning_timeout=2)
+        await clock.observe(notification('item/started','reasoning','thought'))
+        await clock.observe(notification('item/completed','agentMessage','plan',phase='commentary',text='我先核对资料。'))
+        self.assertIsNone(clock.reasoning_deadline)
+        await clock.observe(notification('item/started','reasoning','next'))
+        self.assertAlmostEqual(clock.reasoning_deadline, clock.idle_deadline+1)
+
     async def test_connected_search_has_search_notice_and_bounded_tool_budget(self):
         callback = AsyncMock()
         clock = DecisionClock('turn', 1, .03, callback)
@@ -87,13 +153,13 @@ class ProgressTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(callback.await_count,1)
         self.assertIn('search',clock.tools)
 
-    async def test_raw_reasoning_and_malformed_deltas_do_not_reset_decision_deadline(self):
+    async def test_unrelated_events_and_malformed_deltas_do_not_reset_decision_deadline(self):
         callback=AsyncMock()
         clock=DecisionClock('turn',.03,.2,callback)
         original=clock.idle_deadline
         async def run():
             for i in range(20):
-                await clock.observe(notification('item/completed','reasoning',str(i),text='private'))
+                await clock.observe(notification('item/completed','unknown',str(i),text='private'))
                 await clock.observe(notification('item/agentMessage/delta','agentMessage',str(i),text='unfinished'))
                 await asyncio.sleep(.01)
         task=asyncio.create_task(run())

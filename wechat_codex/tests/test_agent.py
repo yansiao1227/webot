@@ -214,7 +214,7 @@ class Boundaries(unittest.TestCase):
     def test_startup_generation_and_total_limits_are_validated(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'config.json'
-            for key in ('startup_timeout','generation_idle_timeout','turn_timeout'):
+            for key in ('startup_timeout','reasoning_timeout','generation_idle_timeout','turn_timeout'):
                 for value in (True,0,601,'30'):
                     path.write_text(json.dumps({**CONFIG,key:value}),encoding='utf-8')
                     with self.subTest(key=key,value=value), self.assertRaises(ValueError):

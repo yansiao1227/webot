@@ -261,6 +261,28 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
         callback.assert_not_awaited()
         self.handle.interrupt.assert_not_awaited()
 
+    async def test_observed_reasoning_uses_configured_budget_without_restarting_turn(self):
+        await self.backend.ensure_thread('peer')
+        async def notifications():
+            yield SimpleNamespace(method='item/completed',payload={'turnId':'turn-1',
+                'item':{'id':'input','type':'functionCallOutput','name':'wechat_message'}})
+            await asyncio.sleep(.02)
+            yield SimpleNamespace(method='item/completed',payload={'turnId':'turn-1',
+                'item':{'id':'thought','type':'reasoning'}})
+            await asyncio.sleep(.07)
+        self.handle.stream=notifications
+        async def collect(stream,turn_id):
+            async for _ in stream:pass
+            return SimpleNamespace(status='completed',id=turn_id,duration_ms=90,items=[],final_response='完整答案')
+        callback=AsyncMock()
+        with patch.dict(sys.modules,{'openai_codex._run':SimpleNamespace(_collect_async_turn_result=collect)}):
+            reply,_=await self.backend.generate_with_progress('thread-1',
+                {**event(),'_decision_timeout':.05,'_reasoning_timeout':.3},callback)
+        self.assertEqual(reply,'完整答案')
+        callback.assert_not_awaited()
+        self.thread.turn.assert_awaited_once()
+        self.handle.interrupt.assert_not_awaited()
+
     async def test_startup_timeout_interrupts_known_turn(self):
         await self.backend.ensure_thread('peer')
         stopped=asyncio.Event()

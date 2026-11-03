@@ -64,7 +64,7 @@ async def process(agent,job):
     async def generate(tid, event):
         event['_decision_timeout']=agent.config.get('decision_timeout',60)
         event['_tool_timeout']=agent.config.get('tool_timeout',60)
-        for key, default in (('startup_timeout',60),('generation_idle_timeout',30),('turn_timeout',600)):
+        for key, default in (('startup_timeout',60),('reasoning_timeout',180),('generation_idle_timeout',30),('turn_timeout',600)):
             event['_'+key]=agent.config.get(key,default)
         async def call(current):
             current['reply_progress']=[p['text'] for p in parts if p['state']=='accepted']
@@ -187,7 +187,7 @@ async def process(agent,job):
                         return
                     if details.get('progress_pending') is not None:
                         store.update(eid,'unknown',result=details,error='进度发送超时或结果未确认，禁止改写原段或跳段');return
-                    labels={'tool':'工具执行等待超时','startup':'模型启动等待超时',
+                    labels={'reasoning':'模型推理等待超时','tool':'工具执行等待超时','startup':'模型启动等待超时',
                             'generation':'正文生成停滞超时','total':'本轮处理达到总时限'}
                     reply=labels.get(stage,'等待下一执行决定超时')+'，本轮已停止；已发出的内容保留，不会自动重跑。'
                     generation={'error':'model_timeout','turn_id':getattr(error,'turn_id',None),
