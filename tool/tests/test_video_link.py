@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from tool.content_reading import video
+from tool.content_reading import video, platforms, web
 from tool.content_reading.api import invoke
 
 
@@ -17,7 +17,27 @@ class VideoLinkTests(unittest.TestCase):
             self.assertEqual(prepare.call_args.kwargs['subtitles'], [{'url': 'https://video.example/a.srt'}])
             self.assertEqual(prepare.call_args.kwargs['model_dir'], 'model')
 
+    def test_media_processing_never_calls_platform_mcp(self):
+        def download(url, path, **options):
+            Path(path).write_bytes(b'\x00\x00\x00\x18ftypisom')
+            return {'bytes': 12}
+        with tempfile.TemporaryDirectory() as directory, patch.object(video, 'download', side_effect=download), \
+                patch.object(video.media, 'prepare_content', return_value={'images': ['frame.jpg']}), \
+                patch.object(platforms, 'read') as mcp:
+            result = invoke('read-video-link', url='https://sns-video-v3.xhscdn.com/media', output_dir=directory)
+            self.assertEqual(result['state'], 'read')
+            self.assertEqual(result['result']['method'], 'local_video')
+            mcp.assert_not_called()
 
+    def test_share_page_is_not_treated_as_mp4_or_routed_to_mcp(self):
+        def download(url, path, **options):
+            Path(path).write_bytes(b'<html>shared note</html>')
+            return {'bytes': 24}
+        with tempfile.TemporaryDirectory() as directory, patch.object(video, 'download', side_effect=download), \
+                patch.object(platforms, 'read') as mcp:
+            result = invoke('read-video-link', url='https://xhslink.com/a/sample', output_dir=directory)
+            self.assertEqual(result['state'], 'unavailable')
+            mcp.assert_not_called()
 
     def test_private_source_is_rejected_before_download(self):
         with patch.object(video, 'download') as download:
@@ -43,3 +63,17 @@ class VideoLinkTests(unittest.TestCase):
             self.assertEqual(result['state'], 'read')
             self.assertEqual(result['result']['duration_seconds'], 10)
             self.assertEqual(result['result']['method'], 'local_video')
+
+    def test_xiaohongshu_short_link_stops_at_complete_note_target(self):
+        final = 'https://www.xiaohongshu.com/explore/' + 'a'*24 + '?xsec_token=sample'
+        response = Mock(status=302)
+        response.getheader.return_value = final
+        connection = Mock()
+        connection.getresponse.return_value = response
+        with patch.object(web, 'resolve_public', return_value='93.184.216.34'), \
+                patch.object(web.socket, 'create_connection'), \
+                patch.object(web.ssl, 'create_default_context'), \
+                patch.object(web.http.client, 'HTTPConnection', return_value=connection) as connect:
+            self.assertEqual(platforms.resolve_xiaohongshu('https://xhslink.com/a/sample'), final)
+            connect.assert_called_once()
+            response.read1.assert_not_called()

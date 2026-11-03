@@ -13,6 +13,7 @@ TOOLS = {
     'read-document': '读取本机文本、PDF、DOCX、XLSX；扫描PDF输出采样页面。',
     'read-web-content': '读取HTTP(S)页面，默认支持本机、内网和公网；可选浏览器profile。',
     'read-video-content': '通过浏览器读取B站当前视频的播放器字幕；需指定profile目录。',
+    'read-platform-content': '通过本机小红书或B站MCP读取公开分享来源。',
     'read-video-link': '下载MP4直链或HTTP重定向至MP4的短链，抽帧和转写；可优先读取指定SRT字幕。',
 }
 
@@ -50,6 +51,12 @@ def invoke(tool, *, path=None, url=None, kind=None, name=None, output_dir=None,
                 return {'tool': tool, 'source': source, 'state': 'unavailable', 'result': result,
                         'reason': result.get('reason', '未取得可用视频内容')}
             scope = result.get('content_scope', '实际取得的视频字幕或采样；未读取的部分不能据此推断')
+        elif tool == 'read-platform-content':
+            from . import platforms
+            result = platforms.read(url, output_dir=output_dir)
+            if result.get('state') != 'read':
+                return {'tool': tool, 'source': source, **result}
+            scope = result['content_scope']
         elif tool == 'read-image-content':
             if not url:
                 raise ValueError('需要HTTP(S)来源url')

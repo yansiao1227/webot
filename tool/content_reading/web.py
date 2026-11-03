@@ -153,12 +153,16 @@ class _Text(HTMLParser):
             self.parts.append(data.strip())
 
 
-def fetch(url, timeout=20, *, public_only=False, output_dir=None, image_only=False):
+def fetch(url, timeout=20, *, public_only=False, output_dir=None, image_only=False, stop_at=None):
     deadline = time.monotonic() + timeout
     original = url
     for _ in range(6):
         validate_url(url)
         address = resolve_public(url) if public_only else None
+        # 跳转目标已经提供所需标识时，只返回地址，不请求该页面或读取正文。
+        if stop_at is not None and stop_at(url):
+            return {'url': original, 'final_url': url, 'method': 'redirect',
+                    'content_scope': '仅解析跳转地址，未读取目标页面正文'}
         parsed = urlsplit(url)
         remaining = deadline - time.monotonic()
         if remaining <= 0:

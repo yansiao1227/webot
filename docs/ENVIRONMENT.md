@@ -18,6 +18,9 @@ Python入口通过`tool/settings.py`自动读取配置，不依赖当前工作�
 | `CONTENT_BROWSER_PROFILE_DIR` | 专用浏览器profile，可由CLI参数覆盖；示例值为`wechat_codex/state/live/browser-profile` |
 | `CONTENT_BROWSER_CHANNEL` | 默认`msedge` |
 | `CONTENT_WEB_USER_AGENT` | 可选HTTP/浏览器UA覆盖；留空时浏览器按实际安装版本生成桌面UA，HTTP读取Windows Edge/Chrome注册版本，无可用版本时回退`Mozilla/5.0` |
+| `CONTENT_PLATFORM_MCP_PYTHON` | 平台MCP独立Python，默认`tool/state/platform-mcp/venv/Scripts/python.exe`，需安装`mcp>=1.10,<2`及B站依赖 |
+| `CONTENT_BILIBILI_MCP_SCRIPT` | B站stdio服务入口，默认`tool/state/platform-mcp/bilibili-mcp/mcp_server.py` |
+| `CONTENT_XIAOHONGSHU_MCP_URL` | 小红书HTTP MCP，默认`http://127.0.0.1:18060/mcp`，仅允许回环地址；启动方式见[平台接入说明](../tool/PLATFORM_MCP.md) |
 | `RE_WECHAT_GCC` / `RE_WECHAT_OBJDUMP` / `RE_WECHAT_NM` | 构建/诊断程序路径，留空使用PATH中的同名命令 |
 | `RE_WECHAT_WEIXIN_DLL` | 本机固定版本微信模块位置；构建时写入生成的profile，版本与散列检查保持 |
 
