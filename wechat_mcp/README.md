@@ -91,4 +91,4 @@ python -B -X utf8 -W error::ResourceWarning .\wechat_mcp\run_tests.py
 | `docs/` | API、群聊授权及验证专题文档 |
 | `state/` | 本机配置、消息队列和验证报告，不纳入源码 |
 
-普通回归不依赖官方 MCP SDK；需要验证 SDK 的 HTTP/stdio 互操作时，按 [验证说明](docs/VALIDATION.md) 安装 `validation/requirements-sdk.txt` 并运行 `validation/sdk_validation.py`。
+验证 SDK 的 HTTP/stdio 互操作时，按 [验证说明](docs/VALIDATION.md) 安装 `validation/requirements-sdk.txt` 并运行 `validation/sdk_validation.py`。

@@ -65,7 +65,7 @@ python -B -X utf8 .\client_hook\client_hook.py listen --consumer-id my-agent
 | `client_hook/client/`、`client_hook/api/` | Python 客户端和 HTTP 服务 |
 | `client_hook/profiles/` | 固定版本适配资料 |
 
-模块构建不需要外部参考仓库或真实微信 DLL。MinHook 的依赖出处与许可证保留在 `client_hook/vendor/`。
+MinHook 的依赖出处与许可证保留在 `client_hook/vendor/`。
 
 ## 本地检查
 
