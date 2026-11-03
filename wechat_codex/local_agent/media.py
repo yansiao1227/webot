@@ -21,7 +21,8 @@ def prepare(attachment, source_options=None):
             card = extract(path.read_text(encoding='utf-8-sig'))
             content = {**card, 'text': json.dumps(card['card_metadata'], ensure_ascii=False)}
             if source_options and source_options.get('read_source'):
-                content['source_contents'] = web_content.retrieve(card, source_options)
+                content['source_contents'] = web_content.retrieve(card, {**source_options,
+                    'output_dir': str(path.parent / 'prepared')})
         else:
             content = content_media.prepare_content(path, attachment['message_type'],
                 name=attachment.get('name'), model_dir=ASR_MODEL, output_dir=path.parent / 'prepared')

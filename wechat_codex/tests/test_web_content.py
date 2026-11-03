@@ -9,6 +9,28 @@ from local_agent.cards import extract
 
 
 class WebContentTests(unittest.TestCase):
+    def test_platform_mcp_precedes_web_and_failure_falls_back(self):
+        for url in ['https://b23.tv/sample', 'https://xhslink.com/a/sample']:
+            card = {'card_kind': 'app-message', 'source_urls': [url]}
+            with self.subTest(url=url), patch.object(web_content.platforms, 'read',
+                    return_value={'state': 'read', 'text': '平台来源'}) as read, \
+                    patch.object(content_web, 'read_sources') as fallback:
+                self.assertEqual(web_content.retrieve(card, {})[0]['text'], '平台来源')
+                read.assert_called_once_with(url)
+                fallback.assert_not_called()
+            with patch.object(web_content.platforms, 'read', return_value={'state': 'unavailable'}), \
+                    patch.object(content_web, 'read_sources', return_value=[{'state': 'read', 'text': '网页'}]) as fallback:
+                result = web_content.retrieve(card, {})[0]
+                self.assertEqual(result['text'], '网页')
+                self.assertEqual(result['platform_attempt']['state'], 'unavailable')
+                self.assertTrue(fallback.call_args.args[1]['public_only'])
+
+    def test_non_app_card_does_not_use_platform_mcp(self):
+        with patch.object(web_content.platforms, 'read') as read, patch.object(content_web,
+                'read_sources', return_value=[{'state': 'read'}]):
+            web_content.retrieve({'source_urls': ['https://b23.tv/sample']}, {})
+            read.assert_not_called()
+
     def test_doh_fallback_and_short_cache(self):
         failed = Mock()
         failed.request.side_effect = TimeoutError()
