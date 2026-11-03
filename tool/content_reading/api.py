@@ -13,11 +13,12 @@ TOOLS = {
     'read-document': '读取本机文本、PDF、DOCX、XLSX；扫描PDF输出采样页面。',
     'read-web-content': '读取HTTP(S)页面，默认支持本机、内网和公网；可选浏览器profile。',
     'read-video-content': '通过浏览器读取B站当前视频的播放器字幕；需指定profile目录。',
+    'read-video-link': '下载MP4直链或HTTP重定向至MP4的短链，抽帧和转写；可优先读取指定SRT字幕。',
 }
 
 
 def invoke(tool, *, path=None, url=None, kind=None, name=None, output_dir=None,
-           model_dir=None, browser=False, profile_dir=None, channel=None, public_only=False):
+           model_dir=None, browser=False, profile_dir=None, channel=None, public_only=False, subtitle_url=None):
     """返回 read/unavailable 状态的证据，不调用模型或发送消息。
 
     此 API 不限制本地访问；public_only 是网页读取时可选的调用方策略。
@@ -42,6 +43,13 @@ def invoke(tool, *, path=None, url=None, kind=None, name=None, output_dir=None,
                 raise ValueError('媒体kind须为image/sticker/audio/voice/video')
             result = media.prepare_content(path, kind, name=name, output_dir=output_dir, model_dir=model_dir)
             scope = '本机文件提取结果；图片需由调用者的视觉模型理解，采样和转写限制以result为准'
+        elif tool == 'read-video-link':
+            from . import video
+            result = video.read_link(url, subtitle_url=subtitle_url, output_dir=output_dir, model_dir=model_dir)
+            if result.get('state') != 'read':
+                return {'tool': tool, 'source': source, 'state': 'unavailable', 'result': result,
+                        'reason': result.get('reason', '未取得可用视频内容')}
+            scope = result.get('content_scope', '实际取得的视频字幕或采样；未读取的部分不能据此推断')
         elif tool == 'read-image-content':
             if not url:
                 raise ValueError('需要HTTP(S)来源url')

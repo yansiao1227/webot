@@ -11,6 +11,7 @@ def main(argv=None):
     parser.add_argument('--list-tools', action='store_true')
     parser.add_argument('--path')
     parser.add_argument('--url')
+    parser.add_argument('--subtitle-url', help='read-video-link读取MP4时优先尝试的公网SRT字幕地址')
     parser.add_argument('--kind', choices=('image', 'sticker', 'audio', 'voice', 'video'))
     parser.add_argument('--name', help='文件格式识别使用的名称，默认使用输入文件名')
     parser.add_argument('--output-dir', help='派生图片/音频目录；省略时在CONTENT_CACHE_DIR下创建独立目录')

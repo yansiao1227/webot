@@ -251,7 +251,12 @@ def external_content(text, attachment=None):
         return text
     content = [{'type': 'input_text', 'text': text}]
     prepared = attachment['prepared']
-    for path in prepared.get('images', []):
+    images = list(prepared.get('images', []))
+    for source in prepared.get('source_contents', []):
+        video = source.get('video_content', {})
+        if video.get('method') in ('local_video', 'xiaohongshu_local_video') and video.get('state') == 'read':
+            images.extend(video.get('images', []))
+    for path in list(dict.fromkeys(images))[:MAX_IMAGES]:
         mime = 'image/jpeg' if Path(path).suffix.lower() in ('.jpg', '.jpeg') else 'image/png'
         content.append({'type': 'input_image', 'image_url': 'data:' + mime + ';base64,' +
                         base64.b64encode(Path(path).read_bytes()).decode()})
