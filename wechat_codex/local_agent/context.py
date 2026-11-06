@@ -15,6 +15,14 @@ def choose(store,event_id,mode=None,limit=None,query=''):
     conversation=store.conversation(current['conversation'])
     result={'messages':[],'results':[],'through_seq':current['seq'],'epoch':conversation['epoch'],
             'selection':{'mode':mode,'limit':limit,'max_bytes':16384}}
+    # 与消息选择独立保留有界异常提示，避免旧未知任务被最近12条挤出。
+    issues=store.db.execute('''SELECT j.event_id,j.state FROM jobs j JOIN messages m USING(event_id)
+        WHERE j.conversation=? AND j.epoch=? AND m.seq<?
+        AND j.state IN ('send_wait','send_held','send_failed','interrupted')
+        ORDER BY j.seq DESC LIMIT 8''',(current['conversation'],conversation['epoch'],current['seq'])).fetchall()
+    if issues:
+        result['incomplete_tasks']=[dict(r) for r in issues]
+        result['incomplete_tasks_note']='这些任务未正常完成，不能自动重做其中的有副作用操作；原发送状态未知不表示失败。'
     if not limit:return result
     mid=(event.get('reference')or{}).get('message_id')
     if mode=='reference' and not mid:
@@ -79,6 +87,9 @@ def choose(store,event_id,mode=None,limit=None,query=''):
             # 从已提交的回复段重建多段回答。
             answer='\n'.join(p['text'] for p in r.get('parts',[]) if p.get('state')=='accepted') or answer_row['reply']
             value['assistant_reply']=answer[:4000]
+        if answer_row['state'] in ('send_wait','send_held','send_failed','interrupted'):
+            value['task_status']={'state':answer_row['state'],
+                'note':'前一任务回复未正常完成，禁止将进度当最终答案或自动重做其操作；发送未知不表示失败。'}
         selected.append((row['seq'],value))
     if anchor is not None:
         center=[item for item in selected if item[0]==anchor['seq']]
@@ -87,9 +98,10 @@ def choose(store,event_id,mode=None,limit=None,query=''):
         # 先为精确目标预留空间，再优先选择距离最近的消息。
         selected=center+[item for pair in zip(before,after) for item in pair]+before[len(after):]+after[len(before):]
     messages=[]
+    budget=min(16000,16384-len(json.dumps(result,ensure_ascii=False).encode())-128)
     for seq,value in selected:
         size=len(json.dumps(value,ensure_ascii=False).encode())
-        if used+size>16000:continue  # 为选择结果封套预留空间。
+        if used+size>budget:continue  # 为选择结果与异常任务封套预留空间。
         messages.append((seq,value));used+=size
         if anchor is None and len(messages)>=limit:break
     result['messages']=[value for seq,value in sorted(messages,key=lambda item:item[0])]

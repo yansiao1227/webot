@@ -7,8 +7,10 @@ from .codex_backend import ModelThreadBusy, ModelUnavailable
 from .progress import ProgressDeliveryError
 from .steering import SteeringUnknown
 from . import attachments,media
+from .delivery import defer, confirm_interruption, PENDING
 
 MAX_PARTS = 64
+PROGRESS_WAIT_SECONDS = 8
 
 async def process(agent,job):
     store=agent.store;eid=job['event_id'];event=json.loads(job['event'])
@@ -43,18 +45,24 @@ async def process(agent,job):
             except Exception:
                 try:operation=await agent.mcp.call('get_reply_part_status',event_id=eid,part_index=index)
                 except Exception:operation={'state':'unknown'}
-            deadline=time.monotonic()+8
-            while operation.get('state') in ('queued','running','submitting','prepared') and time.monotonic()<deadline:
+            deadline=time.monotonic()+PROGRESS_WAIT_SECONDS
+            while operation.get('state') in PENDING and time.monotonic()<deadline:
                 await asyncio.sleep(.2)
-                operation=await agent.mcp.call('get_reply_part_status',event_id=eid,part_index=index)
+                try:
+                    operation=await agent.mcp.call('get_reply_part_status',event_id=eid,part_index=index)
+                except Exception:
+                    operation={'state':'unknown'}
+                    break
         except asyncio.CancelledError:
-            store.update(eid,'unknown',result={'progress_pending':pending},
-                         error='进度发送观察被中断，原段需核查，禁止重发')
+            controller=agent.reply_tasks.get(job['conversation'])
+            if controller is not None:controller.open=False
+            defer(store,eid,{'state':'unknown'},progress=pending)
             raise ProgressDeliveryError('进度发送观察未确认') from None
         # 模型继续运行时，不得跳过排队中或状态未知的进度消息。
         if operation.get('state')!='accepted':
-            store.update(eid,'unknown',result={'progress_pending':{**pending,'operation':operation}},
-                         error='进度发送未确认成功，已停止模型，禁止重发或跳段')
+            controller=agent.reply_tasks.get(job['conversation'])
+            if controller is not None:controller.open=False
+            defer(store,eid,operation,progress={**pending,'operation':operation})
             raise ProgressDeliveryError('进度发送未确认')
         parts.append({**pending,'state':'accepted','operation':operation,
                       'elapsed_seconds':round(time.time()-details.get('part_started_at',time.time()),3)})
@@ -175,9 +183,11 @@ async def process(agent,job):
                     generation=error.details()
                 except ProgressDeliveryError as error:
                     row=store.db.execute('SELECT state FROM jobs WHERE event_id=?',(eid,)).fetchone()
-                    if row and row[0]=='unknown':return
                     if getattr(error,'interruption_confirmed',True) is False:
                         store.update(eid,'generation_unknown',error='进度已停止，但模型中止未确认，需核查原轮次');return
+                    if row and row[0] in ('unknown','send_wait','send_held','send_failed'):
+                        confirm_interruption(store,eid)
+                        return
                     reply='本轮进度消息未能继续发送，执行已停止；已发出的内容保留。'
                     generation={'error':'progress_stopped','continue_reply':False,'context_mode':'none'}
                 except TimeoutError as error:
@@ -186,7 +196,11 @@ async def process(agent,job):
                         store.update(eid,'generation_unknown',error='模型启动超时，轮次状态待核查，禁止自动重跑')
                         return
                     if details.get('progress_pending') is not None:
-                        store.update(eid,'unknown',result=details,error='进度发送超时或结果未确认，禁止改写原段或跳段');return
+                        if getattr(error,'interruption_confirmed',False) is False:
+                            store.update(eid,'generation_unknown',error='进度发送超时且模型中止未确认，需核查原轮次');return
+                        defer(store,eid,progress=details['progress_pending'])
+                        confirm_interruption(store,eid)
+                        return
                     labels={'reasoning':'模型推理等待超时','tool':'工具执行等待超时','startup':'模型启动等待超时',
                             'generation':'正文生成停滞超时','total':'本轮处理达到总时限'}
                     reply=labels.get(stage,'等待下一执行决定超时')+'，本轮已停止；已发出的内容保留，不会自动重跑。'
@@ -210,7 +224,7 @@ async def process(agent,job):
             if state=='generated':
                 await agent.verify()
                 controller=agent.reply_tasks.get(job['conversation'])
-                if controller is not None and not await controller.before_send(details['part_final']):
+                if not details.get('delivery_notice') and controller is not None and not await controller.before_send(details['part_final']):
                     state='continuing'
                     continue
                 store.update(eid,'sending')
@@ -218,15 +232,14 @@ async def process(agent,job):
                     operation=await agent.mcp.call('reply_text_part',event_id=eid,part_index=index,
                         text=reply,final=details['part_final'])
                 except Exception:
-                    operation=await agent.mcp.call('get_reply_part_status',event_id=eid,part_index=index)
+                    try:operation=await agent.mcp.call('get_reply_part_status',event_id=eid,part_index=index)
+                    except Exception:operation={'state':'unknown'}
             else:
-                operation=await agent.mcp.call('get_reply_part_status',event_id=eid,part_index=index)
+                try:operation=await agent.mcp.call('get_reply_part_status',event_id=eid,part_index=index)
+                except Exception:operation={'state':'unknown'}
             send_state=operation.get('state')
-            if send_state in ('queued','running','submitting','prepared'):
-                store.update(eid,'sending',result={'operation':operation});return
             if send_state!='accepted':
-                store.update(eid,'unknown' if send_state=='unknown' else 'failed',
-                    result={'operation':operation},error='该段发送未确认成功，禁止跳段或重发');return
+                defer(store,eid,operation);return
             if not any(p['part_index']==index for p in parts):
                 parts.append({'part_index':index,'text':reply,'state':'accepted','operation':operation,
                     'elapsed_seconds':round(time.time()-details.get('part_started_at',time.time()),3)})
@@ -235,7 +248,7 @@ async def process(agent,job):
                 if agent.config.get('mark_read_on_process',True):
                     try:details['conversation_read']=await asyncio.wait_for(agent.mcp.call('get_conversation_read_status',event_id=eid),2)
                     except (MCPError,TimeoutError):pass
-                store.update(eid,'accepted',result=details);return
+                store.update(eid,'interrupted' if details.get('delivery_notice') else 'accepted',result=details);return
             details['part_index']=index+1
             details['part_started_at']=time.time()
             store.update(eid,'continuing',result=details)

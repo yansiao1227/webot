@@ -29,6 +29,10 @@ python -B -X utf8 .\client_hook.py serve
 
 默认服务为 `http://127.0.0.1:30001`；状态目录为模块内 `state/`，可用 `--state-dir` 修改。同一状态目录只允许一个服务实例。使用 Ctrl+C 正常停止；控制进程失联时驻留引擎会关闭接收 Hook，DLL 保持驻留，不尝试并发卸载。
 
+HTTP 服务在原生会话因 `identity_changed` 结束、且控制器确认原钩子已恢复并完整排空后，自动等待同一进程重新登录原账号。只读身份核对按5秒起步退避，最大间隔30秒；连续两次稳定核对后复用驻留 DLL 建立新采集会话，不重置数据库、消费者、确认 token 或请求 ID。MCP 的原轮询线程会自动续连；停采集期间的消息不补取，缺口留在 `coverage_gaps`。
+
+`GET /client_hook/status` 的 `capture_recovery.state` 为 `running`、`waiting_login`、`waiting_same_account`、`confirming_login`、`reconnecting`、`blocked` 或 `stopped`；阻塞时附固定 `reason`，等待时附 `attempts`。`capture.state` 在恢复前仍为故障，不提前宣称采集就绪。进程实例变化、版本或驻留模块校验不符、未完整排空、未知退出不会自动重建；人工停止服务也会停止恢复等待。此恢复仅限 HTTP 服务内的采集会话，不自动登录、切换账号、重跑未知操作或改变朋友圈策略；独立 receiver 命令仍是单次会话。
+
 ```powershell
 python -B -X utf8 .\client_hook.py --token my-local-token serve --port 30001
 python -B -X utf8 .\client_hook.py --token my-local-token status

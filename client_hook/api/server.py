@@ -220,6 +220,7 @@ class Application:
     def status(self):
         simulation = self.backend.__class__.__name__ == 'FixtureBackend'
         return {**self.store.status(), 'backend': 'simulation' if simulation else 'native',
+                'capture_recovery': self.store.get_meta('capture_recovery', {}),
                 'background_error': self.background_error,
                 'native': self.backend.status() if hasattr(self.backend, 'status') else None,
                 'profile_version': '4.1.9.30', 'callback': self.store.get_meta('callback', {}),

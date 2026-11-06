@@ -110,14 +110,14 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(c[0] == 'reply_text' for c in self.mcp.calls))
         self.assertEqual(self.backend.calls, [])
 
-    async def test_unknown_send_pauses_only_its_conversation(self):
+    async def test_unknown_send_isolates_task_and_allows_following_messages(self):
         self.mcp.fail_send_unknown = True
         await self.next_job(event())
-        self.assertEqual(self.store.status()['jobs'], {'unknown': 1})
+        self.assertEqual(self.store.status()['jobs'], {'send_wait': 1})
         self.mcp.fail_send_unknown = False
         self.store.ingest([event('2'), event('3', 'wxid_test_other')])
         ready = self.store.ready()
-        self.assertEqual([j['event_id'] for j in ready], ['3'])
+        self.assertEqual([j['event_id'] for j in ready], ['2', '3'])
 
     async def test_incomplete_generation_pauses_and_never_reruns(self):
         self.store.ingest([event()]); self.store.update('1', 'generating')

@@ -10,7 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from wechat_bridge.httpio import CallbackHTTP, HookClient, RemoteError, encode, signature, verify_signature
@@ -256,6 +256,33 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(self.bridge.refresh_reply(event['event_id'])['state'], 'prepared')
         self.source.account = event['account']
         self.assertEqual(self.bridge.reply_text(event['event_id'], 'blocked')['state'], 'accepted')
+
+    def test_capture_recovery_reuses_consumer_and_clears_source_error(self):
+        event=self.source.inject('wxid_sim_peer','登录恢复后的消息')
+        original=self.hook.request
+        calls=[]
+        polls=0
+        stop=Mock()
+        stop.is_set.side_effect=[False,False,True]
+        def request(method,path,body=None):
+            nonlocal polls
+            calls.append((method,path,body))
+            if method=='GET' and path.startswith('/messages?'):
+                polls+=1
+                if polls==1:
+                    return {'events':[],'ack_token':None,'capture':{'state':'fault'}}
+            return original(method,path,body)
+        with patch.object(self.bridge,'stop',stop), patch.object(self.hook,'request',side_effect=request):
+            self.bridge.collect_loop()
+        self.assertEqual(self.bridge.worker_errors,{})
+        self.assertEqual(self.bridge.store.meta('source')['state'],'running')
+        self.assertEqual(list(self.source.consumers),[self.bridge.consumer])
+        self.assertEqual(self.source.consumers[self.bridge.consumer]['pos'],1)
+        registrations=[c for c in calls if c[:2]==('POST','/consumers')]
+        self.assertEqual(len(registrations),1)
+        self.assertEqual(registrations[0][2]['consumer_id'],self.bridge.consumer)
+        self.assertEqual(self.bridge.store.event(event['event_id'])['event_id'],event['event_id'])
+        stop.wait.assert_called_once_with(2)
 
     def test_ssrf_signatures_and_encrypted_secret(self):
         with self.assertRaises(ValueError):

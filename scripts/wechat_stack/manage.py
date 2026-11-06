@@ -264,6 +264,14 @@ def status():
                 ok = False
             state = ('就绪' if ok else '运行中但未就绪/有错误') + ('；旧启动方式' if not managed(name, items) else '')
         say(name + '：' + state)
+        if name == 'codex' and items:
+            try:
+                value = read(SPECS[name][1] / 'process.json')
+                issues = value.get('delivery_issues', [])
+                if issues:
+                    say('  回复任务异常：' + str(len(issues)) + '；任务单独保留，不据此判定服务离线')
+            except (OSError, ValueError):
+                pass
     say('日志目录：' + str(STATE))
 
 

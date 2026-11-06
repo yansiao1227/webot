@@ -15,7 +15,8 @@ class ReplyTask:
         self.root = json.loads(job['event'])
         details = json.loads(job['result'] or '{}')
         self.cutoff = self.store.db.execute('SELECT COALESCE(MAX(seq),0) FROM jobs').fetchone()[0]
-        self.open = job['state'] != 'sending' or (details.get('adaptive') and not details.get('part_final',True))
+        self.open = not details.get('delivery_notice') and (job['state'] != 'sending' or
+            (details.get('adaptive') and not details.get('part_final',True)))
         self.lock = asyncio.Lock()
         self.changed = asyncio.Event()
         self.version = self.store.db.execute('SELECT COUNT(*) FROM steering WHERE root_id=?', (job['event_id'],)).fetchone()[0]

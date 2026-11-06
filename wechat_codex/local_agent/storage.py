@@ -167,13 +167,46 @@ class Store:
             db.execute("UPDATE jobs SET state='generation_unknown',error='引导任务执行中断，需核查原线程' WHERE state IN ('pending','continuing') AND event_id IN (SELECT root_id FROM steering)")
             db.execute("UPDATE jobs SET state='generation_unknown',error='仍有未补入的引导，需核查原任务' WHERE state='generated' AND event_id IN (SELECT root_id FROM steering WHERE state='pending')")
             db.execute("UPDATE jobs SET state='generation_unknown',error='进程中断，模型轮次结果待核查',updated=? WHERE state='generating'", (time.time(),))
+            # 老版本曾因单次发送未知暂停会话。只迁移已有发送意图的任务，
+            # 模型/引导执行未知仍保留原恢复门禁。
+            migrated = set()
+            for row in db.execute("""SELECT j.* FROM jobs j JOIN conversations c
+                    ON c.id=j.conversation AND c.epoch=j.epoch
+                    WHERE j.state IN ('unknown','sending')""").fetchall():
+                details = json.loads(row['result'] or '{}')
+                if details.get('progress_pending') and not details.get('delivery',{}).get('interruption_confirmed'):
+                    # 旧版记录未保存中止确认，不能凭发送成功推断工具已经停止。
+                    continue
+                if row['state'] == 'unknown' and not (details.get('operation') or details.get('progress_pending')):
+                    continue
+                delivery = details.get('delivery', {})
+                delivery.setdefault('started_at', row['updated'])
+                delivery['next_check'] = 0
+                details['delivery'] = delivery
+                db.execute("UPDATE jobs SET state=?,result=? WHERE event_id=?",
+                           ('send_held' if row['state']=='unknown' else 'send_wait',
+                            json.dumps(details, ensure_ascii=False), row['event_id']))
+                db.execute("UPDATE jobs SET state='merged_done' WHERE event_id IN (SELECT event_id FROM steering WHERE root_id=?)", (row['event_id'],))
+                migrated.add(row['conversation'])
+            for cid in migrated:
+                db.execute("""UPDATE conversations SET paused=0 WHERE id=? AND NOT EXISTS
+                    (SELECT 1 FROM jobs WHERE conversation=conversations.id AND epoch=conversations.epoch
+                    AND state IN ('generation_unknown','unknown','failed')) AND NOT EXISTS
+                    (SELECT 1 FROM schedule_runs r JOIN schedules s ON s.id=r.schedule_id
+                    WHERE s.conversation=conversations.id
+                    AND r.state IN ('generation_unknown','unknown','failed'))""", (cid,))
+            for row in db.execute("SELECT event_id,result FROM jobs WHERE state IN ('send_wait','send_held','send_failed')"):
+                details = json.loads(row['result'] or '{}')
+                if details.get('progress_pending') and not details.get('delivery',{}).get('interruption_confirmed'):
+                    db.execute("UPDATE jobs SET state='generation_unknown',error='进度发送中断，模型停止未确认，需核查原轮次' WHERE event_id=?", (row['event_id'],))
             db.execute("UPDATE conversations SET paused=1 WHERE EXISTS (SELECT 1 FROM jobs WHERE conversation=conversations.id AND epoch=conversations.epoch AND state IN ('generation_unknown','unknown','failed'))")
 
     def ready(self, exclude=()):
         rows = self.db.execute('''SELECT j.* FROM jobs j JOIN conversations c ON c.id=j.conversation
             WHERE c.paused=0 AND j.epoch=c.epoch AND j.state IN ('pending','generated','sending','continuing')
             AND NOT EXISTS(SELECT 1 FROM jobs older WHERE older.conversation=j.conversation
-                AND older.epoch=j.epoch AND older.seq<j.seq AND older.state NOT IN ('accepted','merged_done'))
+                AND older.epoch=j.epoch AND older.seq<j.seq AND older.state NOT IN
+                    ('accepted','merged_done','send_wait','send_held','send_failed','interrupted'))
             ORDER BY j.seq''').fetchall()
         return [dict(row) for row in rows if row['conversation'] not in exclude]
 
@@ -199,12 +232,12 @@ class Store:
                            (cid, context['epoch'], context['through_seq']))
             if state in ('generation_unknown', 'unknown', 'failed'):
                 db.execute('UPDATE conversations SET paused=1 WHERE id=(SELECT conversation FROM jobs WHERE event_id=?)', (eid,))
-            if state == 'accepted':
+            if state in ('accepted','send_wait','send_held','send_failed','interrupted'):
                 db.execute("UPDATE jobs SET state='merged_done',updated=? WHERE event_id IN (SELECT event_id FROM steering WHERE root_id=?)", (time.time(), eid))
 
     def reset(self, cid):
         with self.tx() as db:
-            if db.execute("SELECT 1 FROM jobs WHERE conversation=? AND state IN ('pending','generating','generated','sending','continuing')", (cid,)).fetchone():
+            if db.execute("SELECT 1 FROM jobs WHERE conversation=? AND state IN ('pending','generating','generated','sending','continuing','send_wait','send_held')", (cid,)).fetchone():
                 raise ValueError('该会话仍有排队或执行中的消息，不能重置')
             changed = db.execute('UPDATE conversations SET thread_id=NULL,epoch=epoch+1,paused=0,updated=? WHERE id=?', (time.time(), cid)).rowcount
             if not changed:
@@ -216,6 +249,7 @@ class Store:
                 'scheduled_runs': dict(self.db.execute('SELECT state,COUNT(*) FROM schedule_runs GROUP BY state')),
                 'context_messages': self.db.execute('SELECT COUNT(*) FROM messages').fetchone()[0],
                 'conversations': [dict(r) for r in self.db.execute('SELECT * FROM conversations')],
+                'delivery_issues': [dict(r) for r in self.db.execute("SELECT event_id,conversation,state,error FROM jobs WHERE state IN ('send_wait','send_held','send_failed','interrupted')")],
                 'blocked': [dict(r) for r in self.db.execute("SELECT event_id,conversation,state,error FROM jobs WHERE state IN ('generation_unknown','unknown','failed')")]}
 
     def close(self):

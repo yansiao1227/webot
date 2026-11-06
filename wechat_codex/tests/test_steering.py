@@ -392,14 +392,16 @@ class SteeringTests(unittest.IsolatedAsyncioTestCase):
         await self.feed(event('guide',text='补充'))
         await asyncio.wait_for(self.backend.steered.get(),2)
         await self.end()
-        self.assertEqual(self.state('root'),'sending')
+        self.assertEqual(self.state('root'),'send_wait')
         calls=len(self.backend.inputs)
         for operation in self.mcp.operations.values():
             operation['state']='accepted'
         self.mcp.call=original
         self.store.recover()
         restarted=Agent(self.store,self.mcp,self.backend,CONFIG)
-        await restarted.process(self.store.ready()[0])
+        from local_agent.delivery import reconcile
+        job=dict(self.store.db.execute("SELECT * FROM jobs WHERE event_id='root'").fetchone())
+        await reconcile(restarted,job)
         self.assertEqual(len(self.backend.inputs),calls)
         self.assertEqual(len(self.mcp.sent),1)
         self.assertEqual(self.state('guide'),'merged_done')
@@ -408,7 +410,7 @@ class SteeringTests(unittest.IsolatedAsyncioTestCase):
 class AdaptiveSteeringTests(SteeringTests):
     adaptive=True
 
-    async def test_pending_nonfinal_send_keeps_guidance_window_and_segment_numbers(self):
+    async def test_pending_nonfinal_send_closes_guidance_and_keeps_segment_numbers(self):
         self.backend.response=lambda i,v: ('第一段',{'continue_reply':True}) if i==0 else (v['payload']['text'],{})
         original=self.mcp.call
         async def queued_send(name,**args):
@@ -419,13 +421,17 @@ class AdaptiveSteeringTests(SteeringTests):
         self.mcp.call=queued_send
         await self.begin()
         await self.end()
-        self.assertEqual(self.state('root'),'sending')
-        self.assertTrue(self.agent.reply_tasks[self.root['conversation_id']].open)
+        self.assertEqual(self.state('root'),'send_wait')
+        self.assertNotIn(self.root['conversation_id'],self.agent.reply_tasks)
         await self.feed(event('guide',text='后面改用简短结论'))
-        self.assertEqual(self.state('guide'),'merged')
+        self.assertEqual(self.state('guide'),'pending')
         self.mcp.operations[('root',0)]['state']='accepted'
         self.mcp.call=original
+        from local_agent.delivery import reconcile, NOTICE
+        job=dict(self.store.db.execute("SELECT * FROM jobs WHERE event_id='root'").fetchone())
+        await reconcile(self.agent,job)
         await self.agent.process(self.store.ready()[0])
         self.assertEqual([s['part_index'] for s in self.mcp.sent],[0,1])
-        self.assertEqual(self.mcp.sent[-1]['text'],'后面改用简短结论')
-        self.assertEqual(self.state('guide'),'merged_done')
+        self.assertEqual(self.mcp.sent[-1]['text'],NOTICE)
+        self.assertEqual(self.state('guide'),'pending')
+        self.assertEqual(self.state('root'),'interrupted')

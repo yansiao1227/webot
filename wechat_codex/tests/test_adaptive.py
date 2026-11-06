@@ -230,8 +230,8 @@ class AdaptiveTests(unittest.IsolatedAsyncioTestCase):
         self.backend.generate_with_progress=stream
         await self.agent.process(self.store.ready()[0])
         self.assertEqual(continued,[])
-        self.assertEqual(self.store.status()['jobs'],{'unknown':1})
-        self.assertTrue(self.store.conversation('wxid_test_peer')['paused'])
+        self.assertEqual(self.store.status()['jobs'],{'send_held':1})
+        self.assertFalse(self.store.conversation('wxid_test_peer')['paused'])
 
     async def test_crash_after_progress_never_regenerates_or_resends(self):
         self.store.ingest([event('stream-crash')])
@@ -371,7 +371,7 @@ class AdaptiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(len(json.dumps(context,ensure_ascii=False).encode()),16384)
         self.assertEqual(self.store.select_context('plain',mode='none')['messages'],[])
 
-    async def test_unknown_part_prevents_next_model_step_and_pauses(self):
+    async def test_unknown_part_prevents_next_model_step_without_pausing(self):
         self.store.ingest([event('unknown-part')])
         original=self.mcp.call
         async def unknown(name,**args):
@@ -381,8 +381,8 @@ class AdaptiveTests(unittest.IsolatedAsyncioTestCase):
         self.backend.generate=AsyncMock(return_value=('已完成第一步',{'continue_reply':True,'next_step':'第二步'}))
         await self.agent.process(self.store.ready()[0])
         self.assertEqual(self.backend.generate.await_count,1)
-        self.assertEqual(self.store.status()['jobs'],{'unknown':1})
-        self.assertTrue(self.store.conversation('wxid_test_peer')['paused'])
+        self.assertEqual(self.store.status()['jobs'],{'send_held':1})
+        self.assertFalse(self.store.conversation('wxid_test_peer')['paused'])
 
     async def test_later_step_timeout_sends_one_final_error_without_repeating_first(self):
         self.store.ingest([event('timeout-part')])

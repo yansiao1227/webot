@@ -101,6 +101,14 @@ class Boundaries(unittest.TestCase):
             value['capture'].update(account='self', state='stopped')
             self.assertFalse(m.healthy('client_hook', {'account': 'self'}, 'h', 'm'))
 
+    def test_codex_delivery_issue_does_not_imply_service_is_unhealthy(self):
+        value = {'running': True, 'ready': True, 'heartbeat': time.time(), 'errors': {},
+                 'blocked': [], 'delivery_issues': [{'state': 'send_held'}]}
+        with patch.object(m, 'read', return_value=value):
+            self.assertTrue(m.healthy('codex', {}, 'h', 'm'))
+            value['blocked'] = [{'state': 'generation_unknown'}]
+            self.assertFalse(m.healthy('codex', {}, 'h', 'm'))
+
 
 class RealProcessLifecycle(unittest.TestCase):
     def check_service(self, name, from_env=False):

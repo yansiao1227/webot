@@ -76,7 +76,7 @@ class Agent:
             await self._process(job)
         finally:
             state = self.store.db.execute('SELECT state FROM jobs WHERE event_id=?', (job['event_id'],)).fetchone()[0]
-            if state in ('accepted','unknown','failed','generation_unknown'):
+            if state in ('accepted','unknown','failed','generation_unknown','send_wait','send_held','send_failed','interrupted'):
                 self.reply_tasks.pop(job['conversation'], None)
 
     async def generate(self, tid, event, progress=None):
@@ -255,17 +255,16 @@ class Agent:
         state = result.get('state')
         if state == 'accepted':
             self.store.update(eid, 'accepted', result={'operation': result, 'accepted_at': time.time()})
-        elif state in ('queued', 'running'):
-            self.store.update(eid, 'sending', result={'operation': result})
         else:
-            self.store.update(eid, 'unknown' if state == 'unknown' else 'failed', result={'operation': result},
-                              error='发送未确认成功，禁止自动重发')
+            from .delivery import defer
+            defer(self.store, eid, result)
 
     async def reconcile(self, eid):
         try:
             result = await self.mcp.call('get_reply_status', event_id=eid)
         except Exception:
-            self.store.update(eid, 'unknown', error='已提交请求的状态不可确认，禁止自动重发')
+            from .delivery import defer
+            defer(self.store, eid)
             return
         self.apply_result(eid, result)
 
@@ -282,6 +281,16 @@ class Agent:
                 if task.done():
                     await task
                     del self.active[cid]
+            # 发送核对与正常任务共用并发和会话锁；不会重入正在执行的会话。
+            # 每轮至多安排一个到期查询，避免持续新消息饿死旧状态核对。
+            from .delivery import due, reconcile
+            for job in due(self.store):
+                if len(self.active) >= self.config.get('max_concurrency', 2):
+                    break
+                cid = job['conversation']
+                if cid not in self.active:
+                    self.active[cid] = asyncio.create_task(reconcile(self, job))
+                    break
             for job in self.store.ready(self.active):
                 if len(self.active) >= self.config.get('max_concurrency', 2):
                     break

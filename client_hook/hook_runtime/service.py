@@ -124,6 +124,37 @@ def inspect_status(args):
                     snapshot_scope='individual_atomic_fields_not_group_atomic',**status)
     finally: api.api.CloseHandle(process)
 
+
+def probe_login(args):
+    """沿用版本、进程、驻留 DLL 校验，只读查询是否可安全重建采集。"""
+    from hook_runtime.login_identity import LoginUnavailable, read_identity
+    import struct
+    api=Win();target=resolve_target(api,args);pid=target['pid'];dll=target['dll']
+    modules=[m for m in api.modules(pid) if m[0]==normalized(dll)]
+    if len(modules)!=1:raise RuntimeError('recovery resident DLL missing')
+    pe=PE(str(dll))
+    if hashlib.sha256(pe.data).hexdigest()!=target['pins']['files'][dll.name]:
+        raise RuntimeError('recovery DLL pin mismatch')
+    process=api.api.OpenProcess(0x1000|0x10,False,pid)
+    if not process:raise C.WinError(C.get_last_error())
+    try:
+        same_user(api.api,process)
+        if api.creation(process)[0]!=target['created']:raise RuntimeError('process instance changed')
+        status=read_status(api,process,modules[0][1],pe)
+        if status['state']!='idle' or status['run_busy'] or status['installed'] or status['admitted']:
+            raise RuntimeError('recovery resident engine not safely idle')
+        if args.fixture_pid:
+            host=PE(str(target['exe']))
+            base=next(base for path,base,_ in api.modules(pid) if path==normalized(target['exe']))
+            logged=api.read(process,base+export_rva(host,'fixture_logged_in',code=False),4)
+            if struct.unpack('<I',logged)[0]!=1:raise LoginUnavailable('fixture_logged_out')
+            account='wxid_fixture_self'
+        else:
+            base=next(base for path,base,_ in api.modules(pid) if path==normalized(target['core']))
+            account=read_identity(api,process,base)
+        return {'account':account,'pid':pid,'created':target['created'],'dll':str(dll)}
+    finally:api.api.CloseHandle(process)
+
 def stop_current(args):
     api=Win();target=resolve_target(api,args);status=inspect_status(args)
     if status.get('state') in ('idle','not_loaded'):
@@ -145,6 +176,11 @@ def run(args):
     if os.name!='nt' or C.sizeof(C.c_void_p)!=8 or C.sizeof(Config)!=2496 or C.sizeof(PublicStatus)!=224:
         raise RuntimeError('Windows x64 v3 ABI required')
     api=Win();t=resolve_target(api,args)
+    if getattr(args,'expected_account',None):
+        login=probe_login(args)
+        if (login['account']!=args.expected_account or str(login['created'])!=args.expected_creation or
+                login['pid']!=t['pid'] or login['created']!=t['created']):
+            raise RuntimeError('recovery login identity mismatch')
     pid,created,dll,pins=t['pid'],t['created'],t['dll'],t['pins']
     run_id=uuid.uuid4().hex[:12];run_dir=t['directory']/('run-'+run_id);run_dir.mkdir()
     logfile=run_dir/'events.ndjson'
@@ -208,8 +244,8 @@ def run(args):
         remote_cfg=api.allocate(process,bytes(cfg))
         worker=api.thread(process,base+entry,remote_cfg);pending='HookRun'
         atomic_json(t['active_path'],active)
-        output({'type':'loading','pid':pid,'event_file':str(logfile),'duration':args.duration,
-                'run_id':run_id,'dll_reused':reused,'dll_base':hex(base)})
+        output({'type':'loading','pid':pid,'process_created':str(created),'event_file':str(logfile),'duration':args.duration,
+                  'run_id':run_id,'dll':str(dll),'dll_reused':reused,'dll_base':hex(base)})
         def stdin_stop():
             try:
                 for line in sys.stdin:
@@ -307,6 +343,8 @@ def main():
     events.add_argument('--fixture-pid',type=int)
     events.add_argument('--endpoint',default='*')
     events.add_argument('--pid',type=int)
+    events.add_argument('--expected-account',help=argparse.SUPPRESS)
+    events.add_argument('--expected-creation',help=argparse.SUPPRESS)
     events.add_argument('--duration',type=int,default=0,help='0 = until stop/controller exit')
     events.add_argument('--max-events',type=int,default=0,help='0 = unlimited')
     for name in ('status','stop'):
@@ -314,6 +352,8 @@ def main():
     argv=sys.argv[1:]
     if argv and argv[0].startswith('-') and argv[0] not in ('-h','--help'): argv=['events']+argv
     args=p.parse_args(argv)
+    if args.command in ('events','start') and bool(args.expected_account)!=bool(args.expected_creation):
+        p.error('recovery account and process identity must be paired')
     if args.command in ('events','start') and (not 0<=args.duration<=600 or not 0<=args.max_events<=1000 or
         not re.fullmatch(r'(?:\*|wxid_[A-Za-z0-9_-]+|[0-9]+@chatroom)',args.endpoint) or len(args.endpoint)>127):
         p.error('invalid endpoint or duration/event bound')

@@ -6,7 +6,7 @@
 
 一个状态目录绑定微信账号、MCP地址和consumer ID，不允许混用。`conversations` 保存会话ID、Codex thread ID、上下文代次epoch和暂停状态。私聊一个thread，群聊一个thread；同群被允许的消息共享上下文，不跨群或跨私聊。
 
-同一会话只处理最早未完成job；不同会话最多2个并行，配置范围1–4。Codex thread首次使用时创建，后续复用；重启后按持久thread ID恢复。恢复失败时暂停，不静默创建新thread丢失上下文。这些thread独立于当前开发聊天；是否显示在Desktop历史中取决于实际Codex环境，适配器不操作Desktop UI。
+同一会话串行处理正常任务；发送待确认或失败的任务单独保留，不阻塞后续消息。不同会话最多2个并行，配置范围1–4。Codex thread首次使用时创建，后续复用；重启后按持久thread ID恢复。恢复失败时暂停，不静默创建新thread丢失上下文。这些thread独立于当前开发聊天；是否显示在Desktop历史中取决于实际Codex环境，适配器不操作Desktop UI。
 
 微信消息通过SDK ExternalMessage传入，权限级别低于机主指令，不被当作新的用户授权。凭据不进入提示词。MCP发送由本地固定代码执行，模型应产生符合JSON schema的reply；不能选择接收者或更改event_id。
 
@@ -30,15 +30,19 @@
 | pending | 处理原事件，复用已保存thread |
 | generating | 标记generation_unknown并暂停会话；模型可能已把轮次写入历史，不自动再生成 |
 | generated | 复用已保存回复，重新核对权限后发送，无需再调用模型 |
-| sending | 只查询原event_id的MCP回复状态，不再POST |
+| sending / send_wait / send_held | 只查询原event_id与分段的MCP回复状态，不再POST原段；后续消息继续处理 |
 | accepted | 不处理、不重发 |
-| unknown / failed | 暂停该会话，保留证据；其他会话不受影响 |
+| send_failed / interrupted | 原任务发送失败或已中止结案，不重跑；后续消息继续处理 |
+| generation_unknown / failed | 模型、引导执行或权限异常仍暂停核查；其他会话不受影响 |
+| 旧版 unknown | 有已完成模型输出及原发送意图时迁移为send_held；旧进度记录未确认模型停止时仍需人工核查 |
+
+发送任务由后台每10秒安排查询原操作；120秒仍待确认时标记send_held并继续核对，不阻塞后续消息。原进度被接受且模型已停止后，只按原事件下一段补一次固定中止说明，不恢复原模型。明确失败或持续未知时，MCP不允许越过原段发送异常提示；后续消息的上下文保留未完成任务说明。状态中的delivery_issues与需暂停核查的blocked分开。恢复路径及计时见[回复流程](ADAPTIVE_REPLIES.md)。
 
 未知操作不自动重试。模型失败、不可恢复的thread、权限不匹配等错误也不自动换thread、换账号或绕过MCP发送。
 
 ## 显式重置
 
-会话无pending/generating/generated/sending工作时可执行：
+会话无pending/generating/generated/sending/continuing工作、且无send_wait/send_held待确认发送时可执行：
 
 ```powershell
 .\wechat_codex\state\sdk-env\Scripts\python.exe -B -X utf8 .\wechat_codex\agent.py reset --conversation wxid_会话
