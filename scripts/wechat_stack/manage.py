@@ -149,7 +149,7 @@ def managed(name, items):
     return True
 
 
-def spawn(name, config, hook_token, mcp_token):
+def spawn(name, config, hook_token, mcp_token, pid=None):
     entry, directory, _ = SPECS[name]
     directory.mkdir(parents=True, exist_ok=True)
     marker(name).unlink(missing_ok=True)
@@ -163,6 +163,8 @@ def spawn(name, config, hook_token, mcp_token):
         args += ['--account', config['account']]
         for conversation in config['conversations']:
             args += ['--allow-conversation', conversation]
+    if name == 'client_hook' and pid is not None:
+        args += ['--pid', str(pid)]
     env = os.environ.copy()
     # 不向本地收发栈传递无关键值或父进程的过期凭据。
     for key in list(env):
@@ -214,7 +216,7 @@ def stop_one(name):
     raise RuntimeError(name + ' 退出超时；保留上游服务，请查看日志，不强杀进程')
 
 
-def start():
+def start(target=None, verify=None):
     if not PYTHON.is_file():
         raise RuntimeError('未找到 Codex Python 环境，请按 wechat_codex/README.md 安装')
     config, hook_token, mcp_token = configuration()
@@ -228,12 +230,23 @@ def start():
     launched = []
     try:
         for name in SPECS:
+            if verify is not None:
+                verify()
             process = None
             if not processes(name):
                 say(name + '：后台启动中……')
-                process = spawn(name, config, hook_token, mcp_token)
+                process = (spawn(name, config, hook_token, mcp_token, pid=target['pid'])
+                           if target is not None else spawn(name, config, hook_token, mcp_token))
                 launched.append(name)
             wait_ready(name, config, hook_token, mcp_token, process)
+            if verify is not None:
+                verify()
+            if name == 'client_hook' and target is not None:
+                capture = request(hook_port(), '/client_hook/status', hook_token).get('capture') or {}
+                native = capture.get('native') or {}
+                # ready 事件只公布 PID；创建时间由启动前后的 verify 核验。
+                if native.get('pid') != target['pid']:
+                    raise RuntimeError('Hook 与监控的微信实例不一致')
             say(name + '：就绪')
     except BaseException:
         say('启动未完成，正在回收本次新启动的服务……')
@@ -248,6 +261,12 @@ def start():
 
 
 def status():
+    say('自动跟随：' + ('已暂停（手动 start 恢复）' if (STATE / 'supervisor.pause').exists() else '未暂停'))
+    try:
+        watcher = read(STATE / 'supervisor.json')
+        say('监控状态：' + str(watcher['state']) + ('（心跳已过期）' if time.time() - watcher['heartbeat'] > 30 else ''))
+    except (OSError, ValueError, KeyError):
+        say('监控状态：尚无记录')
     try:
         config, hook_token, mcp_token = configuration()
         credentials_ok = True
@@ -285,8 +304,10 @@ def main():
     lock = StateLock(STATE)
     try:
         if args.command == 'start':
+            (STATE / 'supervisor.pause').unlink(missing_ok=True)
             start()
         elif args.command == 'stop':
+            (STATE / 'supervisor.pause').write_text('pause\n', encoding='ascii')
             for name in reversed(SPECS):
                 stop_one(name)
             say('全部停止；微信仍保持打开，消息与会话数据保留。')
