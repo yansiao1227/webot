@@ -4,7 +4,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from local_agent.mcp import allowed, MCP
@@ -28,6 +29,52 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
         self.store.ingest([value])
         jobs = self.store.ready()
         await self.agent.process(next(j for j in jobs if j['event_id'] == value['event_id']))
+
+    async def test_activated_digest_failure_does_not_take_chat_offline(self):
+        digest = SimpleNamespace(task=None, store=Mock(), tick=AsyncMock(side_effect=ValueError('digest failure')),
+                                 close=AsyncMock(), config={'publisher': 'ssh_snapshot', 'site_url': 'http://daily.example.org'},
+                                 publisher=Mock(status=Mock(return_value={'publisher': 'ssh_snapshot'})), history_ready=True)
+        digest.store.meta.side_effect = OSError('diagnostic DB unavailable')
+        digest.store.status.return_value = {'paused': False, 'latest': None}
+        with patch('daily_digest.runner.attach', return_value=digest):
+            task = asyncio.create_task(self.agent.run())
+            try:
+                await asyncio.wait_for(self.agent.ready.wait(), 2)
+                self.mcp.events.append(event('chat-despite-digest'))
+                deadline = asyncio.get_running_loop().time() + 3
+                while not self.mcp.sent and asyncio.get_running_loop().time() < deadline:
+                    await asyncio.sleep(.01)
+                self.assertTrue(self.mcp.sent)
+                self.assertFalse(self.agent.errors)
+                digest.store.meta.assert_any_call('runtime_error', 'digest_tick_failed')
+                self.assertEqual(self.agent.daily_digest_status()['runtime_error'], 'digest_tick_failed')
+                digest.store.status.side_effect = OSError('all DB reads unavailable')
+                self.assertEqual(self.agent.daily_digest_status()['runtime_error'], 'digest_tick_failed')
+            finally:
+                self.agent.stop.set()
+                await asyncio.wait_for(task, 3)
+        digest.close.assert_awaited_once()
+
+    def test_daily_digest_publisher_status_is_local_and_diagnostic_failure_is_isolated(self):
+        publisher = Mock()
+        publisher.status.return_value = {'publisher': 'ssh_snapshot', 'latest_release': {
+            'release_id': 'stable-release', 'state': 'confirmed'}}
+        store = Mock()
+        store.status.return_value = {'paused': False, 'latest': {'state': 'accepted',
+            'moment': {'state': 'accepted', 'server_confirmed': False}}}
+        self.agent.digest = SimpleNamespace(publisher=publisher, store=store,
+            config={'publisher': 'ssh_snapshot', 'site_url': 'http://daily.example.org'}, history_ready=True)
+        result = self.agent.daily_digest_status()
+        self.assertEqual(result['publisher_status']['latest_release']['release_id'], 'stable-release')
+        self.assertFalse(result['latest']['moment']['server_confirmed'])
+        publisher.status.side_effect = RuntimeError('private details')
+        result = self.agent.daily_digest_status()
+        self.assertEqual(result['state'], 'active')
+        self.assertEqual(result['publisher_status'], {'state': 'unavailable', 'error': 'RuntimeError'})
+        self.assertFalse(self.agent.errors)
+        store.status.side_effect = ValueError('private storage details')
+        self.assertEqual(self.agent.daily_digest_status(), {'state': 'status_unavailable', 'error': 'ValueError'})
+        self.assertFalse(self.agent.errors)
 
     async def test_durable_before_ack_and_replayed_batch_does_not_duplicate(self):
         self.mcp.events = [event()]

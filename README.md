@@ -14,7 +14,10 @@
 | Codex 自动回复 | 监听允许会话的新请求，选择同会话背景，为每个问题组织独立执行线程，调用本机 Codex 的模型与工具，将执行进度和最终答案分段回复 | [wechat_codex](wechat_codex/README.md) |
 | 提醒与定时任务 | 在原会话创建固定提醒或定时 Codex 任务，支持一次性、固定间隔、每天和每周，提供查看、修改、暂停、恢复和取消操作 | [定时任务](wechat_codex/docs/SCHEDULES.md) |
 | 内容读取工具 | 读取图片、音视频、文本、PDF、DOCX、XLSX、网页和 B 站播放器字幕；提供画面采样、本地 CPU 语音转写及读取范围说明 | [tool](tool/README.md) |
+| 每日观察 | React报纸式AI、内地香港热点及两地收盘日报，保存历史网页，并通过MCP按日发布导读和链接 | [daily_digest](daily_digest/README.md) |
 | 本地服务管理 | 按依赖顺序后台启动、检查和正常停止 Hook、MCP 与 Codex，校验配置、凭据、进程身份及服务健康状态 | [服务管理](scripts/wechat_stack/README.md) |
+
+独立的[每日观察](daily_digest/README.md)提供AI、内地香港热点和两地收盘的React日报网页，通过MCP按日发布导读与链接，保留每期历史。
 
 ## 在微信里如何使用
 

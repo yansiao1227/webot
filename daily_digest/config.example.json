@@ -1,0 +1,14 @@
+{
+  "account": "wxid_example",
+  "publisher": "ssh_snapshot",
+  "site_url": "http://example.invalid",
+  "mobile_verified_at": null,
+  "task_id": "daily-observer",
+  "sources": {
+    "market_holidays": {
+      "a": [],
+      "hk": []
+    }
+  },
+  "image_search_budget_seconds": 300
+}

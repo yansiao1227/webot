@@ -38,6 +38,7 @@ async def serve(directory, config):
             try:
                 atomic_json(directory / 'process.json', {'pid': os.getpid(), 'running': True, 'ready': agent.ready.is_set(),
                     'started_at': started, 'heartbeat': time.time(), 'errors': agent.errors,
+                    'daily_digest': agent.daily_digest_status(),
                     'active_conversations': list(agent.active), **store.status()})
             except Exception as error:
                 agent.errors['heartbeat'] = type(error).__name__

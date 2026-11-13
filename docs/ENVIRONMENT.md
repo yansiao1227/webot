@@ -14,6 +14,7 @@ Python入口通过`tool/settings.py`自动读取配置，不依赖当前工作�
 | `RE_WECHAT_CODEX_BIN` | 非空时注入SDK配置，留空沿用运行配置或SDK默认 |
 | `RE_WECHAT_HOOK_STATE_DIR` / `RE_WECHAT_MCP_STATE_DIR` / `RE_WECHAT_CODEX_STATE_DIR` | 管理器使用的现有状态目录，默认值见`.env.example` |
 | `CONTENT_CACHE_DIR` | 通用工具未显式指定输出位置时的缓存根，默认`tool/state/cache` |
+| `DAILY_DIGEST_STATE_DIR` | 每日观察的本机配置、密文凭据与执行账本，默认`daily_digest/state/live`；站点URL及手机验收标记保存在该目录`config.json` |
 | `CONTENT_MODEL_DIR` | 本机转写权重，默认`tool/state/models/faster-whisper-small` |
 | `CONTENT_BROWSER_PROFILE_DIR` | 专用浏览器profile，可由CLI参数覆盖；示例值为`wechat_codex/state/live/browser-profile` |
 | `CONTENT_BROWSER_CHANNEL` | 默认`msedge` |
@@ -40,6 +41,12 @@ Python入口通过`tool/settings.py`自动读取配置，不依赖当前工作�
 
 `DAILY_DIGEST_PREVIEW_DB` 同时指定待发布的正式内容数据库。SSH部署只使用已安装的专用密钥进行非交互认证；首次安装公钥可通过既有管理员登录完成，不改变已有登录方式或保存密码。
 
+
+
+日报配置与执行账本使用`DAILY_DIGEST_STATE_DIR`（默认`daily_digest/state/live`），站点URL、账号和手机验收记录位于该目录config.json，站点密钥沿用DPAPI，见[每日观察](../daily_digest/README.md)。配置后完成手机验收并activate，正常重载Codex才进入每日任务。
+
+
+
 MCP 朋友圈写入策略不使用环境变量：默认读取 MCP 状态目录下的 `sns-policy.json`，也可用 `serve --sns-config <文件>` 显式指定。文件不存在时使用默认授权与限频策略；公开文字发布不设启用开关；配置示例、直接调用与入站会话授权、限频及人工恢复见[朋友圈配置](../wechat_mcp/docs/SNS.md)。修改策略文件后正常重启 MCP，不清空状态。暂停与调用额度保存于 MCP 自有数据库，重启不会重置。
 
 | 来源 | 默认位置 | 清理方式 |
@@ -52,3 +59,5 @@ MCP 朋友圈写入策略不使用环境变量：默认读取 MCP 状态目录�
 | 转写模型权重 | `CONTENT_MODEL_DIR` | 持久模型，不随结果缓存清理 |
 
 上述微信路径以默认`RE_WECHAT_CODEX_STATE_DIR`为例。工具文件默认输出策略变更前，未指定输出目录会创建系统临时目录下的`content-reading-*`或`content-image-*`，没有自动清理。2026-10-27按用户要求，将旧系统临时目录中的2个`content-image-*`目录（4个文件，共564994字节）复制到工作区`tool/state/cache/`，逐文件校验SHA256和大小后删除原目录；旧`content-reading-*`/`content-image-*`目录已清空。迁移清单为`tool/state/cache/migration-20261027.json`，缓存与清单均由`.gitignore`排除。没有删除系统临时目录本身或其他程序的文件。
+
+日报配图预算在日报状态目录 `config.json` 的 `image_search_budget_seconds` 设置，默认300秒，示例见 `daily_digest/config.example.json`。配图复用Codex联网；媒体发布使用所选发布器的SSH身份或HTTPS站点密钥。媒体缓存保存在本次生成目录的 `media/`，预览导入时保留日报与该目录的相邻关系。

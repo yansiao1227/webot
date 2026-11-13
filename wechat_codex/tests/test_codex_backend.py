@@ -122,7 +122,7 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
             self.configs.append(kwargs)
             return kwargs
         self.sdk = SimpleNamespace(AsyncCodex=lambda cfg: self.runtime, CodexConfig=config,
-            ApprovalMode=SimpleNamespace(auto_review='auto_review'), Sandbox=SimpleNamespace(full_access='full_access'),
+            ApprovalMode=SimpleNamespace(auto_review='auto_review'), Sandbox=SimpleNamespace(full_access='full_access', read_only='read_only'),
             ExternalMessage=lambda **kwargs: kwargs)
         self.modules = patch.dict(sys.modules, {'openai_codex': self.sdk})
         self.modules.start()
@@ -143,6 +143,75 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('model', options)
         self.assertEqual(options['approval_mode'], 'auto_review')
         self.assertEqual(options['sandbox'], 'full_access')
+
+    async def test_report_has_independent_readonly_thread_and_large_output_schema(self):
+        await self.backend.create_report_thread()
+        options = self.runtime.thread_start.call_args.kwargs
+        self.assertEqual(options['sandbox'], 'read_only')
+        self.assertEqual(options['service_name'], 'daily-observer')
+        self.assertNotIn('reply字段', options['base_instructions'])
+        from daily_digest.content import REPORT_FIELDS
+        from daily_digest.examples.build_preview import sample
+        original = sample()
+        report = {key: original[key] for key in REPORT_FIELDS}
+        report['intro'] = '正文' * 1000
+        packet = {key: original[key] for key in ('date', 'cutoff_at', 'markets', 'sources', 'warnings')}
+        packet['news'] = {key: [{'source_id': article['source_ids'][0]} for article in articles]
+                          for key, articles in original['articles'].items()}
+        self.thread.run.return_value = SimpleNamespace(status='completed', id='turn-report', duration_ms=10,
+            items=[], final_response=json.dumps(report, ensure_ascii=False))
+        value, info = await self.backend.generate_report('thread-1', packet)
+        self.assertEqual(value['intro'], report['intro'])
+        self.assertEqual(value['markets'], packet['markets'])
+        self.assertEqual(value['sources'], packet['sources'])
+        self.assertIsNot(value['markets'], packet['markets'])
+        self.assertFalse(value['simulation'])
+        self.assertEqual(info['turn_id'], 'turn-report')
+        submitted = self.thread.turn.call_args
+        self.assertEqual(submitted.kwargs['source'], 'daily-observer')
+        self.assertIn('articles', submitted.kwargs['output_schema']['properties'])
+        self.assertNotIn('reply', submitted.kwargs['output_schema']['properties'])
+        self.assertNotIn('markets', submitted.kwargs['output_schema']['properties'])
+        ai_refs = submitted.kwargs['output_schema']['properties']['articles']['properties']['ai']['items']['properties']['source_ids']['items']['enum']
+        self.assertEqual(set(ai_refs), {item['source_id'] for item in packet['news']['ai']})
+        self.assertIsInstance(submitted.args[0], str)
+        self.assertFalse(self.backend.active_turns)
+
+    async def test_completed_invalid_report_is_known_failure_with_original_turn_id(self):
+        await self.backend.create_report_thread()
+        self.thread.run.return_value = SimpleNamespace(status='completed', id='bad-report', duration_ms=10,
+            items=[], final_response='{broken')
+        with self.assertRaises(ValueError) as error:
+            from daily_digest.examples.build_preview import sample
+            packet = sample()
+            packet['news'] = {key: [{'source_id': a['source_ids'][0]} for a in items]
+                              for key, items in packet['articles'].items()}
+            await self.backend.generate_report('thread-1', packet)
+        self.assertTrue(error.exception.completed)
+        self.assertEqual(error.exception.turn_id, 'bad-report')
+        self.thread.turn.assert_awaited_once()
+
+    async def test_report_budget_is_capped_by_window_without_changing_chat_budget(self):
+        from daily_digest.examples.build_preview import sample
+        from daily_digest.content import REPORT_FIELDS
+        value = sample()
+        packet = {key: value[key] for key in ('date', 'cutoff_at', 'markets', 'sources', 'warnings')}
+        packet['news'] = {key: [{'source_id': item['source_ids'][0]} for item in articles]
+                          for key, articles in value['articles'].items()}
+        draft = {key: value[key] for key in REPORT_FIELDS}
+        with patch.object(self.backend, '_generate', new=AsyncMock(return_value=(draft, {'turn_id': 'limited'}))) as generate, \
+                patch('local_agent.codex_backend.time.time', return_value=100):
+            await self.backend.generate_report('thread-1', packet, deadline=145, timeout=5000)
+            options = generate.call_args.args[1]
+            self.assertEqual(options['_turn_timeout'], 45)
+            self.assertEqual(options['_absolute_deadline'], 145)
+            await self.backend.generate_report('thread-1', packet, timeout=5000)
+            self.assertEqual(generate.call_args.args[1]['_turn_timeout'], 1200)
+            generate.reset_mock()
+            with self.assertRaises(TimeoutError) as error:
+                await self.backend.generate_report('thread-1', packet, deadline=99)
+            self.assertTrue(error.exception.completed)
+            generate.assert_not_called()
 
     async def test_explicit_cli_binary_is_passed_to_sdk_without_changing_default(self):
         self.assertNotIn('codex_bin',self.configs[0])

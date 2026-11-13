@@ -21,6 +21,33 @@ class Agent:
         self.ready = asyncio.Event()
         from .scheduler import Scheduler
         self.scheduler = Scheduler(self)
+        self.digest = None
+        self.digest_status = {'state': 'not_configured_or_not_verified'}
+
+    def daily_digest_status(self):
+        if self.digest is None:
+            return self.digest_status
+        diagnostic = ({'runtime_error': self.digest_status['runtime_error']}
+                      if self.digest_status.get('runtime_error') else {})
+        try:
+            try:
+                publication = self.digest.publisher.status()
+                if not isinstance(publication, dict):
+                    raise ValueError('invalid_publisher_status')
+            except Exception as error:
+                publication = {'state': 'unavailable', 'error': type(error).__name__}
+            return {'state': 'active', 'publisher': self.digest.config.get('publisher', 'http_api'),
+                    'publisher_status': publication,
+                    'site_url': self.digest.config.get('site_url'), 'history_ready': self.digest.history_ready,
+                    'preparation_time': '16:30', 'publish_window': '17:00-18:00', 'timezone': 'Asia/Shanghai',
+                    **self.digest.store.status(), **diagnostic}
+        except Exception as error:
+            # 状态文件读取故障不能使普通微信服务的心跳失败。
+            return {'state': 'status_unavailable', 'error': type(error).__name__, **diagnostic}
+
+    def active_count(self):
+        digest_active = (self.digest is not None and self.digest.task is not None and not self.digest.task.done())
+        return len(self.active) + int(digest_active)
 
     async def verify(self):
         status = await self.mcp.call('bridge_status')
@@ -272,6 +299,16 @@ class Agent:
         last_cleanup = 0
         while not self.stop.is_set():
             await self.scheduler.tick()
+            if self.digest is not None and len(self.active) < self.config.get('max_concurrency', 2):
+                try:
+                    await self.digest.tick()
+                except Exception:
+                    # 日报异常保留在自身账本；不得使普通会话回复服务离线。
+                    self.digest_status['runtime_error'] = 'digest_tick_failed'
+                    try:
+                        self.digest.store.meta('runtime_error', 'digest_tick_failed')
+                    except Exception:
+                        pass  # 日报数据库故障时仍可从内存心跳核查固定错误码。
             if time.monotonic() - last_cleanup >= 30:
                 self.store.prune()
                 protected = [r[0] for r in self.store.db.execute("SELECT event_id FROM jobs WHERE state NOT IN ('accepted','merged_done')")]
@@ -285,20 +322,20 @@ class Agent:
             # 每轮至多安排一个到期查询，避免持续新消息饿死旧状态核对。
             from .delivery import due, reconcile
             for job in due(self.store):
-                if len(self.active) >= self.config.get('max_concurrency', 2):
+                if self.active_count() >= self.config.get('max_concurrency', 2):
                     break
                 cid = job['conversation']
                 if cid not in self.active:
                     self.active[cid] = asyncio.create_task(reconcile(self, job))
                     break
             for job in self.store.ready(self.active):
-                if len(self.active) >= self.config.get('max_concurrency', 2):
+                if self.active_count() >= self.config.get('max_concurrency', 2):
                     break
                 cid = job['conversation']
                 if cid not in self.active:
                     self.active[cid] = asyncio.create_task(self.process(job))
             for run in self.scheduler.ready():
-                if len(self.active) >= self.config.get('max_concurrency', 2):
+                if self.active_count() >= self.config.get('max_concurrency', 2):
                     break
                 cid = run['conversation']
                 if cid not in self.active and (run['state'] == 'sending' or not self.store.conversation(cid)['paused']):
@@ -317,6 +354,13 @@ class Agent:
         loops = []
         try:
             await self.backend.start()
+            try:
+                from daily_digest.runner import attach
+                self.digest = attach(self)
+            except Exception as error:
+                # 配置或凭据故障不扩大为普通聊天服务故障。
+                self.digest = None
+                self.digest_status = {'state': 'configuration_error', 'error': type(error).__name__}
             # 报告就绪前，将新消费者注册到 latest 位置。
             await self.collect_once(0)
             loops = [asyncio.create_task(self.collect_loop()), asyncio.create_task(self.worker_loop()),
@@ -332,4 +376,6 @@ class Agent:
             # 正常关闭时允许有界模型轮次执行完成。
             if self.active:
                 await asyncio.gather(*self.active.values(), return_exceptions=True)
+            if self.digest is not None:
+                await self.digest.close()
             await self.backend.close()
