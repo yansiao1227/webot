@@ -1,0 +1,8 @@
+CREATE TABLE editions (
+  date TEXT PRIMARY KEY NOT NULL,
+  content_hash TEXT NOT NULL,
+  title TEXT NOT NULL,
+  cutoff_at TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

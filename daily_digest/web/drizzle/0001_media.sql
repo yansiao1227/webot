@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS media (sha256 TEXT PRIMARY KEY, body BLOB NOT NULL, content_type TEXT NOT NULL DEFAULT 'image/webp');

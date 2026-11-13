@@ -34,6 +34,12 @@ Python入口通过`tool/settings.py`自动读取配置，不依赖当前工作�
 
 ## 文件放在哪里
 
+日报SSH自动部署使用`DAILY_DIGEST_DEPLOY_HOST`、`DAILY_DIGEST_DEPLOY_USER`及`DAILY_DIGEST_DEPLOY_IDENTITY_FILE`；私钥路径留空时使用`~/.ssh/webot_daily_digest_ed25519`，相对路径按仓库根解析。专用公钥需先安装到服务器，后台采用BatchMode及严格主机密钥校验，不保存SSH密码、不向HTTP读地址传发布密钥。日报配置选择`publisher=ssh_snapshot`，原`http_api`仅适用于HTTPS写接口。部署与恢复说明见[日报服务器部署](../daily_digest/deploy/README.md)。
+
+本地日报预览使用Node读取根`.env`中的`DAILY_DIGEST_PREVIEW_PORT`（默认4173）和`DAILY_DIGEST_PREVIEW_DB`（默认`daily_digest/web/state/preview.sqlite`），数据库相对路径按仓库根解析，已有进程环境优先。只监听127.0.0.1，不把模拟样本写成正式日报。
+
+`DAILY_DIGEST_PREVIEW_DB` 同时指定待发布的正式内容数据库。SSH部署只使用已安装的专用密钥进行非交互认证；首次安装公钥可通过既有管理员登录完成，不改变已有登录方式或保存密码。
+
 MCP 朋友圈写入策略不使用环境变量：默认读取 MCP 状态目录下的 `sns-policy.json`，也可用 `serve --sns-config <文件>` 显式指定。文件不存在时使用默认授权与限频策略；公开文字发布不设启用开关；配置示例、直接调用与入站会话授权、限频及人工恢复见[朋友圈配置](../wechat_mcp/docs/SNS.md)。修改策略文件后正常重启 MCP，不清空状态。暂停与调用额度保存于 MCP 自有数据库，重启不会重置。
 
 | 来源 | 默认位置 | 清理方式 |

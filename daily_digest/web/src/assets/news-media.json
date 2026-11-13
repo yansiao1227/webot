@@ -1,0 +1,29 @@
+[
+  {
+    "file": "news-gemini.webp",
+    "source_url": "https://deepmind.google/blog/gemini-omni-12-flash-fast-and-cost-effective-with-longer-clips",
+    "caption": "Gemini Omni 1.2 Flash 官方发布封面与生成示例拼图",
+    "credit": "Google DeepMind",
+    "illustration": false,
+    "width": 1300,
+    "height": 731
+  },
+  {
+    "file": "news-cosmos.webp",
+    "source_url": "https://huggingface.co/blog/nvidia/cosmos-interactive-world-simulation",
+    "caption": "Cosmos3-Nano 交互式世界模拟点云示意图",
+    "credit": "NVIDIA / Hugging Face",
+    "illustration": false,
+    "width": 1600,
+    "height": 900
+  },
+  {
+    "file": "city-engraving.webp",
+    "source_url": "https://www.chinanews.com.cn/gn/2026/11-06/10727178.shtml",
+    "caption": "山林、水系与城乡空间的生态规划主题插画",
+    "credit": "AI 生成",
+    "illustration": true,
+    "width": 1536,
+    "height": 1024
+  }
+]

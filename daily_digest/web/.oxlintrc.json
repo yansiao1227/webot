@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "node": true
+  },
+  "overrides": [
+    {
+      "files": ["src/**/*", "worker/**/*"],
+      "env": {
+        "browser": true,
+        "node": false
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "node_modules/**",
+    "state/**",
+    "dist/**",
+    "build/**",
+    ".wrangler/**",
+    ".openai/**",
+    "drizzle/**",
+    "migrations/**",
+    "tests/fixtures/**"
+  ]
+}
