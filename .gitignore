@@ -49,3 +49,7 @@ secrets.json
 Thumbs.db
 /docs/PROJECT_STATUS.md
 /docs/REFERENCE_CONTEXT.md
+
+# 日报本机部署约定与托管项目绑定。
+/daily_digest/AGENTS.md
+/daily_digest/web/.openai/hosting.json
