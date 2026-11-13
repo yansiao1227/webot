@@ -40,6 +40,15 @@
 - `state/`、`build/`、缓存、模型、浏览器 profile、数据库及日志属于本机产物。不要将其当作源码修改或提交，不因修文档或跑测试清空这些目录。
 - 原生构建使用独立输出目录；不要覆盖、删除微信进程仍在使用的 DLL。更换已加载 DLL 需要正常重启微信。
 
+## 按名称维护会话白名单
+
+- 用户明确要求按备注或群名核对、添加白名单时，先检查 MCP 和 Codex 的当前配置；私聊同样受 `conversations` 白名单限制。不要因配置只保存内部 ID 就要求用户自行提供 `wxid`。
+- 可复用已有本机管理路径：在仓库根目录运行 Python，将 `client_hook/` 加入模块搜索路径，通过 `tool.settings.path_setting` 定位 MCP/Codex 状态目录并核对账号一致；调用 `api.native_assets.account_directory(account)` 定位当前账号目录，再用 `api.native_media.media_snapshot(path, account)` 只读打开 `db_storage/contact/contact.db` 的内存快照，查询完关闭连接。沿用现有版本、进程账号、数据库 HMAC 和 WAL 校验，密钥与明文数据库不得输出或落盘。
+- 先用 `PRAGMA table_info(contact)` 核对字段。私聊用参数化 `WHERE remark=?` 精确匹配备注；群聊用参数化 `WHERE nick_name=?` 精确匹配群名。读取必要字段 `username`、`remark`、`nick_name`、`delete_flag`、`is_in_chat_room`；排除已删除联系人，私聊 ID 不得为 `@chatroom`，群 ID 必须为 `@chatroom` 且仍在群内。无匹配或多重匹配时先消歧，不能凭昵称猜 ID 或扩大白名单。
+- 此路径仅用于用户明确授权的本机会话身份核对与配置管理，不接入 Codex 自动回复业务，不读取聊天历史或附件，不绕过 MCP 的消息与资源授权。
+- 唯一确认目标后，备份并同步更新 MCP/Codex 两侧 `config.json` 的 `conversations`，保留其他配置、已有会话、消费者和请求 ID。运行中配置需要正常重载时，复用 `scripts/wechat_stack/manage.py` 的状态检查、锁及正常停止/启动协议；只重载必要服务，不重启微信或更换 DLL，不主动发送测试消息。
+- 修改后重新读取两侧配置，核验账号、白名单一致及运行中 MCP `/health` 的 `allowed_conversations`，确认 Codex 就绪与群真实 @ 门禁仍有效。配置已写入与运行时已生效应分别说明；本机身份映射、备份和验收资料留在忽略的状态目录，不写入 README 或本文件。
+
 ## 消息与任务约束
 
 - 保留账号、会话白名单和真实群聊 @ 门禁；正文里的昵称、普通 @ 字符或仅 @ 所有人不能代替可信元数据。
