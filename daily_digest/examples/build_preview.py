@@ -1,0 +1,48 @@
+"""生成明确标注的版式演示数据，不访问网络、不代表真实新闻。根目录执行。"""
+import json
+from pathlib import Path
+from daily_digest.content import validate_edition
+
+
+def sample():
+    day, at = '2030-01-02', '2030-01-02T16:45:00+08:00'
+    themes = [
+        ('ai', '让模型回到真实任务', '模型评估', '模型评估与日常体验之间，往往隔着一段工作流程。比较系统能力时，需要同时观察任务是否完成、证据是否充分，以及出错时能否准确说明边界。'),
+        ('ai', '开源生态需要怎样的基础设施', '开源协作', '开放代码只是协作的起点。清晰的数据说明、可复现的测试和持续维护，才能让研究成果被更多团队实际使用。'),
+        ('ai', '从研究原型到日常工具', 'AI应用', '一项技术能否进入日常生活，取决于它能否解决明确问题。速度、成本和可靠性需要放在同一个场景中评估，不能只看单次演示。'),
+        ('society', '让城市服务更可及', '公共服务', '公共服务的价值最终体现在使用者能否顺利获得帮助。观察一项安排，既要看覆盖范围，也要看办事路径和实际等待时间。'),
+        ('society', '理解政策执行中的细节', '政策观察', '政策目标、实施路径与实际效果属于不同层次。把它们分开观察，能够避免将单次个案误当成整体，也能更清楚地追踪问题。'),
+        ('society', '看见公共议题的多面', '社会观察', '公共议题常常同时涉及效率、公平和不同群体的体验。好的讨论应当先区分已经证实的事实、个体经历和仍有争议的解释。')]
+    sources = []
+    articles = {'ai': [], 'society': []}
+    for i, (category, title, label, paragraph) in enumerate(themes, 1):
+        sources.append({'id': f'source-{i}', 'title': title + '（演示来源）',
+                        'url': f'https://news.example.com/demo/{i}', 'published_at': day + 'T10:00:00+08:00', 'captured_at': at})
+        articles[category].append({'id': f'article-{i}', 'title': title + ' · 演示',
+            'summary': '【版式演示，非真实新闻】' + paragraph,
+            'background': paragraph + '这段内容只用于展示报纸的阅读节奏、段落层次与来源脚注，不对应任何真实发布或发生的事件。',
+            'impact': '值得关注：' + paragraph,
+            'uncertainty': '尚待核实：演示页面不提供任何事实判断。真实日报会区分可核实事实与分析，无法取得来源时明确标注缺项。',
+            'source_ids': [f'source-{i}']})
+    def market(key):
+        return {'status': 'open', 'trade_date': day, 'as_of': at, 'source': '模拟行情，仅用于版式演示',
+                'source_url': 'https://market.example.com/demo', 'classification': '东方财富行业板块' if key == 'a' else '恒生综合行业指数',
+                'indices': [{'code': key + '1', 'name': '上证指数（模拟）' if key == 'a' else '恒生指数（模拟）',
+                             'close': 3200 if key == 'a' else 22000, 'change_pct': 0.68 if key == 'a' else -0.42}],
+                'gainers': [{'code': key + 'g', 'name': '信息技术（模拟）', 'change_pct': 1.58}],
+                'losers': [{'code': key + 'l', 'name': '地产建筑（模拟）', 'change_pct': -1.12}],
+                'missing': ['模拟数据，不代表真实交易表现']}
+    value = {'schema_version': 1, 'date': day, 'cutoff_at': at, 'title': '每日观察',
+             'intro': '把一天的信息，整理成值得停留的阅读。这里是报纸样式演示，不是实时新闻；真实日报将在来源、日期与行情核验通过后发布。',
+             'teaser': '今天真正值得关注的，不只是几条醒目的标题，还有信息背后的背景、边界与变化。每日观察把AI进展、内地香港热点和两地市场放在同一张报纸里，附上可以追溯的来源，留给你一段安静阅读和独立判断的时间。',
+             'highlights': ['从演示看AI栏目如何区分事实与影响', '一份更容易阅读的内地与香港社会观察', '以清楚的数据日期呈现两地市场'],
+             'articles': articles, 'analysis': [{'title': '为什么一份日报需要说明“不知道”',
+             'text': '【版式演示】信息的价值不仅在于提供答案，也在于交代答案来自哪里。每天出现的新闻、公告和市场变化，彼此之间可能存在联系，也可能只是同时发生。整理日报时，我们先把可核实的数字与事实单独保存，再解释背景和可能的影响。\n\n这能够避免两种常见错误：把推测写成事实，以及把旧数据当作当天的新变化。对尚无充分证据的部分，保留不确定性，比给出一个看似完整却无法追溯的结论更有用。\n\n真实日报会在每条内容后附上来源，并明确标注市场交易日、内容截止时间和缺失数据。本页所见的新闻与行情均为模拟演示。',
+             'source_ids': ['source-1', 'source-4']}], 'sources': sources, 'markets': {'a': market('a'), 'hk': market('hk')},
+             'warnings': ['这是版式预览，所有新闻与行情均为模拟内容，不可发布朋友圈。'], 'simulation': True}
+    return validate_edition(value, allow_simulation=True)
+
+
+if __name__ == '__main__':
+    (Path(__file__).parent / 'edition.preview.json').write_text(
+        json.dumps(sample(), ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
