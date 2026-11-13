@@ -8,8 +8,11 @@
 - 通过 SQLite 保存已采集消息，支持长轮询、独立消费者、批次确认和断点续取。
 - 发送私聊、群聊文字，使用请求 ID 查询发送状态并避免重复提交。
 - 提供资源任务、分块读取和原生会话已读接口。
+- 按作者和帖子 ID 分页读取当前账号的朋友圈本地缓存，通过 HTTP 和 SDK 使用；不主动刷新网络时间线。
 
 消息消费确认与微信已读是独立操作。`accepted` 仅表示客户端本地接受发送请求；服务不提供对端送达回执。服务停止期间的消息及启动前的历史消息不自动补取，非文字发送不在接口范围内。
+
+朋友圈提供好友帖子点赞、取消点赞、普通文字评论、公开纯文字发布及持久请求 ID 查询。原生发帖仍有完成后延迟退出登录的已知风险，完整 UI 上下文差异未解决，见[原生限制](docs/SNS_41930.md)。Hook 负责幂等、防重和原生校验，频率、次数及暂停策略由 MCP 管理；见[交接文档](../wechat_mcp/docs/SNS_HANDOFF.md)。能力以 `/client_hook/status` 的 `capabilities.sns` 为准，本地缓存不代表网络刷新。
 
 ## 目录与入口
 
@@ -63,6 +66,7 @@ python -B -X utf8 .\client_hook\client_hook.py listen --consumer-id my-agent
 | --- | --- |
 | [API.md](docs/API.md) | HTTP 路由、SDK/CLI、消息消费、发送状态与资源接口 |
 | [READ_STATE_41930.md](docs/READ_STATE_41930.md) | 原生会话已读接口 |
+| [SNS_41930.md](docs/SNS_41930.md) | 朋友圈原生侧车、构建、执行边界与结构证据 |
 | [MENTIONS.md](docs/MENTIONS.md) | 群聊 @ 信息来源与字段 |
 | [implementation.html](docs/implementation.html) | 消息监听与发送实现图解 |
 | `client_hook/native/` | 原生 Hook、快照队列与运行时 |

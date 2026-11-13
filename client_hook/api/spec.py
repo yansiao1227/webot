@@ -97,6 +97,13 @@ def _schemas():
             'delivery_confirmed': {'const': False},
             'result': {'type': ['object', 'null']},
         }),
+        'SnsOperation': obj({
+            'request_id': CONSUMER_ID, 'account': STRING,
+            'action': {'enum': ['like', 'unlike', 'comment', 'publish']},
+            'state': {'enum': ['queued', 'running', 'accepted', 'confirmed', 'failed', 'unknown']},
+            'local_accepted': {'type': 'boolean'}, 'server_confirmed': {'type': 'boolean'},
+            'result': {'type': ['object', 'null']},
+        }, ['request_id', 'account', 'action', 'state', 'local_accepted', 'server_confirmed']),
         'Batch': obj({
             'events': {'type': 'array', 'items': ref('Event')},
             'next_cursor': STRING,
@@ -167,6 +174,38 @@ def _paths():
 
 def specification():
     paths = _paths()
+    sns_id = {'type': 'string', 'pattern': '^[1-9][0-9]{0,19}$',
+              'description': 'uint64 十进制字符串；禁止 JSON 数字，避免精度丢失'}
+    sns_text = {'type': 'string', 'minLength': 1, 'description': '非空、无 NUL，最多 64 KiB UTF-8'}
+    sns_base = {'account': STRING, 'request_id': CONSUMER_ID}
+    for action in ('like', 'unlike', 'comment', 'publish'):
+        properties = dict(sns_base)
+        required = ['account', 'request_id']
+        if action != 'publish':
+            properties.update({'post_id': sns_id, 'author_id': STRING})
+            required += ['post_id', 'author_id']
+        if action in ('comment', 'publish'):
+            properties['text'] = sns_text
+            required.append('text')
+        if action == 'comment':
+            properties['reply_comment_id'] = sns_id
+        if action == 'publish':
+            properties['visibility'] = {'const': 'public'}
+            required.append('visibility')
+        schema = obj(properties, required)
+        schema['additionalProperties'] = False
+        paths['/client_hook/sns/' + action] = {'post': operation(
+            '朋友圈持久意图；原生能力不可用返回 503；accepted 仅本地接受，unknown 不自动重发',
+            request=schema, response=ref('SnsOperation'))}
+    paths['/client_hook/sns/timeline'] = {'post': operation(
+        '按当前账号读取朋友圈；原生能力不可用返回 503',
+        request={**obj({'account': STRING, 'author_id': STRING,
+                       'max_id': {'type': 'string', 'pattern': '^(0|[1-9][0-9]{0,19})$', 'default': '0'},
+                       'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100, 'default': 20}}, ['account']),
+                 'additionalProperties': False}, response=GENERIC)}
+    paths['/client_hook/sns/requests/{request_id}'] = {'get': operation(
+        '查询原朋友圈操作；不会重新执行', response=ref('SnsOperation'),
+        parameters=[path_param('request_id'), query_param('account', STRING, True)])}
     for route in ('mark', 'status'):
         paths['/client_hook/read/' + route] = {'post': operation(
             '原生会话已读' if route == 'mark' else '查询原已读操作，不重新提交',

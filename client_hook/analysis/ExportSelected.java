@@ -12,6 +12,10 @@ import java.nio.charset.StandardCharsets;
 public class ExportSelected extends GhidraScript {
     public void run() throws Exception {
         String[] args = getScriptArgs();
+        // 可选的第三个参数绑定离线扫描与 Ghidra 数据库的目标身份。
+        if (args.length >= 3 && !args[2].equalsIgnoreCase(currentProgram.getExecutableSHA256())) {
+            throw new IllegalArgumentException("Ghidra program SHA-256 mismatch");
+        }
         Path output = Paths.get(args[0]);
         Files.createDirectories(output);
         // 固定版本的栈探测辅助函数保留 RAX；缺少 callfixup 时，

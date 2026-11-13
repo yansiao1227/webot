@@ -76,6 +76,9 @@ class Application:
             from .read_state import ReadState
             self.read_state = ReadState(self.store, self.resources, backend)
             backend.start(self.store)
+            from .sns import Sns
+            self.sns = Sns(self.store, backend, self.stop_event)
+            self._thread(self.sns.run)
             self._thread(self._send_loop)
             self._thread(self._maintenance)
             if callback:
@@ -236,7 +239,8 @@ class Application:
                                  'resource_protocol': 'fixture_verified',
                                  'attachments': 'all_six_types_resource_read_live_verified',
                                  'native_attachment_download': 'image_video_file_native_cdn_uncached_live_verified_and_sticker_cdn_live_verified',
-                                 'history': 'not_implemented'}}
+                                 'history': 'not_implemented',
+                                 'sns': self.sns.capabilities()}}
 
     def close(self):
         self.stop_event.set()
@@ -373,6 +377,11 @@ class Handler(BaseHTTPRequestHandler):
                 return 200, specification()
             if path == '/client_hook/status':
                 return 200, app.status()
+            if path.startswith('/client_hook/sns/requests/'):
+                if set(query) != {'account'}:
+                    raise ApiError(400, 'invalid_parameter', '需要 account 查询参数')
+                from .sns import wxid
+                return 200, app.sns.status(path.rsplit('/', 1)[1], wxid(query['account'][0], 'account'))
             if path.startswith('/client_hook/resources/'):
                 offset = query.get('offset', [None])[0]
                 return 200, app.resources.status(path.rsplit('/', 1)[1], app.account(),
@@ -395,6 +404,9 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     self.server.poll_slots.release()
         else:
+            if path in {'/client_hook/sns/' + action for action in
+                        ('timeline', 'like', 'unlike', 'comment', 'publish')}:
+                return app.sns.request(path.rsplit('/', 1)[1], body)
             if path in ('/client_hook/read/mark', '/client_hook/read/status'):
                 if set(body) != {'event_id'} or not isinstance(body['event_id'], str):
                     raise ApiError(400, 'invalid_parameter', '需要原入站event_id')

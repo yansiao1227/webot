@@ -32,6 +32,35 @@ class Client:
     def status(self):
         return self.request('GET', '/client_hook/status')
 
+    def sns_timeline(self, account, *, author_id=None, max_id='0', limit=20):
+        body = {'account': account, 'max_id': max_id, 'limit': limit}
+        if author_id is not None:
+            body['author_id'] = author_id
+        return self.request('POST', '/client_hook/sns/timeline', body)
+
+    def sns_like(self, account, post_id, author_id, *, request_id):
+        return self.request('POST', '/client_hook/sns/like',
+            {'account': account, 'post_id': post_id, 'author_id': author_id, 'request_id': request_id})
+
+    def sns_unlike(self, account, post_id, author_id, *, request_id):
+        return self.request('POST', '/client_hook/sns/unlike',
+            {'account': account, 'post_id': post_id, 'author_id': author_id, 'request_id': request_id})
+
+    def sns_comment(self, account, post_id, author_id, text, *, request_id, reply_comment_id=None):
+        body = {'account': account, 'post_id': post_id, 'author_id': author_id,
+                'text': text, 'request_id': request_id}
+        if reply_comment_id is not None:
+            body['reply_comment_id'] = reply_comment_id
+        return self.request('POST', '/client_hook/sns/comment', body)
+
+    def sns_publish(self, account, text, *, request_id, visibility='public'):
+        return self.request('POST', '/client_hook/sns/publish',
+            {'account': account, 'text': text, 'visibility': visibility, 'request_id': request_id})
+
+    def sns_operation(self, account, request_id):
+        return self.request('GET', '/client_hook/sns/requests/' + quote(request_id, safe='') +
+                            '?' + urlencode({'account': account}))
+
     def mark_conversation_read(self, event_id):
         return self.request('POST', '/client_hook/read/mark', {'event_id': event_id})
 

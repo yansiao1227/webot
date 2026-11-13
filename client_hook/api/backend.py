@@ -246,6 +246,111 @@ class NativeBackend:
         except (RuntimeError, OSError, ValueError) as error:
             return {'state': 'unknown', 'error': str(error)}
 
+    def sns_capabilities(self):
+        pins = {}
+        if not self.args.fixture_pid:
+            try:
+                pins = json.loads((MODULE / 'build/sns-current.json').read_text())
+            except (OSError, ValueError):
+                pass
+        return {'timeline': not bool(self.args.fixture_pid), **{
+            action: (not bool(self.args.fixture_pid) and
+                     pins.get('abi_fixture_passed') is True and pins.get('rpc_version') == 3 and
+                     action in pins.get('supported_actions', []))
+            for action in ('like', 'unlike', 'comment', 'publish')}}
+
+    def sns_read(self, account, params):
+        if self.args.fixture_pid or self.profile()['wxid'] != account:
+            raise ApiError(409, 'account_changed', '朋友圈读取账号不匹配')
+        from .native_sns import read_timeline
+        result = read_timeline(account, params)
+        if self.profile()['wxid'] != account:
+            raise ApiError(409, 'account_changed', '朋友圈读取过程中账号已变化')
+        return result
+
+    def sns_execute(self, account, action, params, request_id):
+        if not self.sns_capabilities().get(action):
+            raise ApiError(503, 'sns_native_unavailable', '此朋友圈原生写适配未验证', retryable=False)
+        if self.profile()['wxid'] != account:
+            raise ApiError(409, 'account_changed', '朋友圈执行账号不匹配')
+        from hook_runtime.sns_rpc import invoke
+        import hashlib
+        self.sns_validate(account, action, params)
+        pins = json.loads((MODULE / 'build/sns-current.json').read_text())
+        trace = {'request_id': request_id, 'action': action, 'events': []}
+        started = time.monotonic()
+        def observe(stage, value=None):
+            snapshot = dict(value) if value is not None else None
+            trace['events'].append({'stage': stage, 'at': time.time(),
+                                    'elapsed': time.monotonic() - started, 'native': snapshot})
+            trace['events'] = trace['events'][-16:]
+            if stage == 'submission_result':
+                trace['submission_result'] = snapshot
+            store = getattr(self, 'store', None)
+            if store is not None:
+                store.set_meta('sns_diagnostics:' + request_id, trace)
+        # 提交前先验证诊断可持久保存；不向诊断复制正文或凭据。
+        observe('probe_begin')
+        probe_id = 'sns_probe_' + hashlib.sha256((account + pins['dll_sha256']).encode()).hexdigest()[:40]
+        probe = invoke(account, probe_id, 0, 2)
+        observe('probe_result', probe)
+        deadline = time.monotonic() + 5
+        while probe['state'] == 1 and time.monotonic() < deadline:
+            if self.stopped.wait(1):
+                break
+            probe = invoke(account, probe_id, 0, 1)
+            observe('probe_query_result', probe)
+        if probe['thread_error'] or probe['error'] or not probe['completed']:
+            raise ApiError(503, 'sns_queue_unavailable', 'SNS 所属队列未确认就绪', retryable=False)
+        native_id = 'sns_' + hashlib.sha256((account + '\0' + action + '\0' + request_id).encode()).hexdigest()[:48]
+        identifier = int(params.get('post_id', '0'))
+        observe('submission_begin')
+        result = invoke(account, native_id, identifier, 0, action={'unlike': 1, 'like': 2, 'comment': 3, 'publish': 4}[action],
+                        author=params.get('author_id', ''), body=params.get('text', ''))
+        observe('submission_result', result)
+        # 查询失败（例如登录态改变）不能抹去之前已提交的证据。
+        observations = [dict(result)]
+        query_error = None
+        deadline = time.monotonic() + 125
+        while result['state'] == 1 and not self.stopped.wait(2) and time.monotonic() < deadline:
+            try:
+                observe('query_begin')
+                result = invoke(account, native_id, identifier, 1)
+            except Exception as error:
+                query_error = type(error).__name__
+                observe('query_error')
+                break
+            observe('query_result', result)
+            observations.append(dict(result))
+            observations = observations[:1] + observations[-8:] if len(observations) > 9 else observations
+            if result.get('thread_error'):
+                break
+        confirmed = (result['state'] == 2 and result['completed'] == 1 and result['cleaned'] == 1 and
+                     result['submitted'] == 1 and not result['error'] and
+                     not result['thread_error'] and result['calls'] == 1 and query_error is None)
+        # 非零网络错误未逐项核实是否可能已产生副作用，保守保留 unknown。
+        state = 'confirmed' if confirmed and result['status0'] == result['status1'] == 0 else 'unknown'
+        if action == 'publish':
+            from .native_sns import post_id
+            try:
+                post_id(result.get('server_post_id'))
+            except ApiError:
+                state = 'unknown'
+        return {'state': state, 'local_accepted': state == 'confirmed',
+                'server_confirmed': state == 'confirmed', 'native_request_id': native_id,
+                'post_id': result.get('server_post_id') if action == 'publish' else params['post_id'],
+                'native': result, 'native_observations': observations, 'query_error': query_error}
+
+    def sns_validate(self, account, action, params):
+        if 'reply_comment_id' in params:
+            raise ApiError(400, 'sns_reply_unavailable', '原生精确回复评论尚未适配，不能退化为普通评论')
+        if action != 'publish':
+            from .native_sns import validate_target
+            validate_target(account, params['post_id'], params['author_id'])
+        if action == 'like':
+            from .native_sns import validate_friend
+            validate_friend(account, params['author_id'])
+
     def send(self, request_id, account, params):
         from hook_runtime.sender import send_rpc
         if self.profile()['wxid'] != account:

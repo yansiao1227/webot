@@ -202,3 +202,65 @@ python -B -X utf8 .\scripts\build_resource_sidecar.py
 native_created_at仅由同账号、同会话的原生数据库精确行create_time提供，并要求native_message_id_source为weixin41930_message_db_exact_sort_seq_v1；raw_created_134的早期命名错误，不能作为创建时间。history_filter统计区分filtered_old、accepted_current及unresolved，必须同时证明旧记录被过滤与新记录被保留，不能将“所有出站都被过滤”算作通过。
 
 会话原生已读新增 `POST /client_hook/read/mark`、`POST /client_hook/read/status`，仅传原入站 `event_id`。Python SDK 对应 `mark_conversation_read`、`conversation_read_status`。独立构建 `python scripts/build_read_sidecar.py`；实际未读清零与原生提交分开报告，unknown 不自动重试，消费者 ack 不影响微信已读。实现和验收范围见 [READ_STATE_41930.md](READ_STATE_41930.md)。
+
+## 朋友圈接口
+
+朋友圈路由共用服务 Bearer 认证。每次调用显式指定 `account`；读取或首次提交前需与当前已登录账号一致。
+当前后端的能力在 `/client_hook/status` 的 `capabilities.sns` 中按 `timeline/like/unlike/comment/publish` 报告。
+未适配能力返回 `503 sns_native_unavailable`，不会创建写操作，也不会回退模拟成功。
+原生 `publish` 按侧车构建能力提供；固定版本、模块摘要、进程实例、账号及参数校验继续执行。原生发帖仍有完成后延迟安全退出的已知风险，完整 UI 上下文尚未证明等价，见 [SNS_41930.md](SNS_41930.md)。已保存意图的重复请求及状态查询继续返回原记录。
+Hook 不实施调用频率、次数、写开关或账号暂停策略；这些由 MCP 或其他调用方管理。MCP 后续接入见[交接文档](../../wechat_mcp/docs/SNS_HANDOFF.md)。
+原生分析和可调用范围见 [SNS_41930.md](SNS_41930.md)。
+
+| 路由 | 参数 |
+| --- | --- |
+| `POST /client_hook/sns/timeline` | `account`，可选 `author_id`、`max_id`（默认 `"0"`）、`limit`（默认 20，1–100） |
+| `POST /client_hook/sns/like` | `account`、`request_id`、`post_id`、`author_id` |
+| `POST /client_hook/sns/unlike` | 同上，独立的取消点赞意图 |
+| `POST /client_hook/sns/comment` | 同上，另需 `text`，可选 `reply_comment_id` |
+| `POST /client_hook/sns/publish` | `account`、`request_id`、`text`、显式 `visibility="public"`；仅文字 |
+| `GET /client_hook/sns/requests/{request_id}?account=<wxid>` | 查询原操作，不重新执行 |
+
+`post_id`、`max_id`、`reply_comment_id` 为无前导零的 uint64 十进制**字符串**，避免 JavaScript 数值精度丢失。
+只有 `max_id` 允许 `"0"`，表示第一页。`author_id` 必须来自原帖子作者字段，不能用昵称替代。
+所有写操作必须由调用方提供稳定的 `request_id`，1–63 位字母、数字、下划线或连字符。
+正文非空、无 NUL，最多 64 KiB UTF-8；未知字段、图片和视频发布参数均明确拒绝。
+
+写请求先保存完整规范化参数和账号，再进入独立的有界队列。HTTP 202 返回持久意图；
+用原请求 ID 查询状态。同 ID 的账号、操作类型或参数发生变化返回 409。
+不同字段顺序及省略默认读取参数不影响参数解释。取消点赞不能复用点赞的请求 ID。
+
+| 状态 | 含义 |
+| --- | --- |
+| `queued` | 意图已落盘，尚未开始原生调用 |
+| `running` | 已记录执行意图，可能正在进行原生调用 |
+| `accepted` | 提供者明确报告客户端本地接受，`server_confirmed=false` |
+| `confirmed` | 提供者明确报告服务端业务确认；仅原生结果证据充分时使用 |
+| `failed` | 明确拒绝或提供者明确报告失败 |
+| `unknown` | 执行或完成状态未知；包括运行中服务重启、调用异常或未核实的确认结果 |
+
+`local_accepted` 与 `server_confirmed` 分开报告。查询不会重做操作；`unknown`、`accepted` 均不能通过生成新 ID 自动重发。
+朋友圈意图保存在独立 `sns_operations` 表，不复用文本发送记录；目前不自动清理这些防重记录。
+服务重启时尚未完成的 `queued/running` 意图均转为 `unknown`，不自动补发。
+队列容量为资源背压限制，不是账号级风控额度。失败或未知结果不阻止其他独立意图，但原意图不能重放。历史策略表和暂停文件不再参与 Hook 判断，不自动清空它们。
+当前提供好友作者点赞、取消点赞、普通文字评论及公开文字发布；非好友点赞、精确回复评论、图片和视频发布明确拒绝。
+直接网络写入可能不更新本地缓存，不能根据旧的点赞标志或评论列表自动重发。
+读取时间线的结果必须按 `source`、`network_refreshed` 等字段区分本地缓存与实际网络刷新，不能用缓存命中推断最新朋友圈。
+当前原生 `timeline` 读取当前账号的 `SnsTimeLine` 缓存，返回 `items`、`has_more`、`next_max_id`、
+`source=local_cache`、`network_refreshed=false`；下一页把 `next_max_id` 作为 `max_id` 传入。
+每项包含 `post_id`、`author_id`、`created_at`、`text`、`content_type` 及未经业务解释的 `local_like_flag`。
+数据库和 WAL 各受现有原生快照的 64 MiB 上限约束，密钥及明文数据库仅在内存中使用；缓存缺失或格式校验失败明确报错。
+
+Python SDK 示例（在项目根目录执行，或将 `client_hook` 加入模块搜索路径）：
+
+```python
+from client_hook.client import Client
+
+client = Client(token="<token>")
+page = client.sns_timeline("wxid_self", author_id="wxid_peer", limit=20)
+# 只有对应 capability 为 true 时才可执行写操作。
+intent = client.sns_like("wxid_self", "123456789", "wxid_peer", request_id="sns-like-001")
+status = client.sns_operation("wxid_self", "sns-like-001")
+```
+
+其余 SDK 方法为 `sns_unlike`、`sns_comment`、`sns_publish`。SDK 不生成朋友圈写入 ID、不自动重试任何写操作。

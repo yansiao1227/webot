@@ -68,6 +68,9 @@ struct Operation {
 #ifdef CH_SEND_TASK_OBSERVER
     void *task_observation;
 #endif
+#ifdef CH_SNS_SIDECAR
+    void *sns;
+#endif
 };
 static Operation prepare_operation;
 static Operation *operations;
@@ -83,6 +86,9 @@ static SIZE_T disk_size;
 static HANDLE disk_file, disk_mapping;
 static void inner_invoke(FixtureFnImpl *self);
 static void work_native(Operation *operation);
+#ifdef CH_SNS_SIDECAR
+static void work_sns(Operation *operation);
+#endif
 #ifdef CH_RESOURCE_SIDECAR
 static void work_resource(Operation *operation);
 #endif
@@ -395,6 +401,9 @@ static BOOL clean_out(Operation *operation) {
 }
 
 static void work_native(Operation *operation) {
+#ifdef CH_SNS_SIDECAR
+    if (operation->sns) { work_sns(operation); return; }
+#endif
 #ifdef CH_RESOURCE_SIDECAR
     if (operation->resource) { work_resource(operation); return; }
 #endif
