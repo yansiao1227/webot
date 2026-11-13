@@ -15,6 +15,7 @@ class SimulatedHook:
     def __init__(self, account='wxid_sim_self'):
         self.account = account
         self.events, self.consumers, self.operations, self.sent = [], {}, {}, []
+        self.sns_operations, self.published = {}, []
         self.condition = threading.Condition()
         self.instance = uuid.uuid4().hex
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), HookHandler)
@@ -42,6 +43,27 @@ class SimulatedHook:
         with self.condition:
             if method == 'POST' and path == '/GetSelfProfile':
                 return {'wxid': self.account, 'simulation': True}
+            if method == 'GET' and path == '/client_hook/status':
+                return {'capabilities': {'sns': {'publish': True}}, 'simulation': True}
+            if method == 'POST' and path == '/client_hook/sns/publish':
+                if body.get('account') != self.account or body.get('visibility') != 'public':
+                    raise ValueError('invalid publish parameters')
+                rid = body['request_id']
+                existing = self.sns_operations.get(rid)
+                if existing:
+                    if existing['params'] != body:
+                        raise ValueError('idempotency conflict')
+                    return existing['operation']
+                op = {'request_id': rid, 'account': self.account, 'action': 'publish',
+                      'state': 'confirmed', 'local_accepted': True, 'server_confirmed': True,
+                      'result': {'simulation': True, 'post_id': str(len(self.published) + 1)}}
+                self.sns_operations[rid] = {'params': body, 'operation': op}
+                self.published.append(body)
+                return op
+            if method == 'GET' and parsed.path.startswith('/client_hook/sns/requests/'):
+                if parse_qs(parsed.query).get('account') != [self.account]:
+                    raise ValueError('account mismatch')
+                return self.sns_operations[parsed.path.rsplit('/', 1)[1]]['operation']
             if method == 'POST' and path == '/consumers':
                 name = body['consumer_id']
                 if name not in self.consumers:

@@ -16,6 +16,8 @@
 | `get_message` | event_id | 读取允许范围内的已采集事件 |
 | `reply_text` | event_id、text | 只向原会话回复，一条事件一个持久回复意图 |
 | `get_reply_status` | event_id | 查询原发送操作，不重新提交 |
+| `publish_moment` | intent_id、text，可选 event_id | 公开文字发布；提交前核验Hook能力、授权和暂停，重复意图只查询；仍有[原生风险限制](SNS.md) |
+| `get_moment_publish_status` | intent_id | 仅查询原发布状态，不重发；详见[朋友圈配置与状态语义](SNS.md) |
 
 工具返回 MCP `content`、`structuredContent` 和 `isError`。失败结果不伪造成功；发送副作用在 metadata 中明确标注。`consumer_id` 仅允许 1–63 个 ASCII 字母、数字、下划线或连字符。同一消费者用于一个串行消费循环，不应让不同 agent 共用它。
 

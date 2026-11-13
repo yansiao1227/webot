@@ -1,0 +1,7 @@
+{
+  "allow_direct": true,
+  "event_conversations": [],
+  "min_interval_seconds": 600,
+  "window_seconds": 86400,
+  "max_writes": 5
+}

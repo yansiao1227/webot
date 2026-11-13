@@ -10,6 +10,7 @@
 - 桥接同账号、同会话的精确引用、附件资源读取和原生已读操作。
 - 为定时任务保存原会话长期授权，按任务、执行和分段持久化投递意图；调度由 `wechat_codex` 等宿主负责，见[接口说明](docs/API.md#定时任务授权与投递)。
 - 按账号与会话白名单控制处理范围；群聊要求可信结构化 @ 名单包含当前账号。
+- 提供公开文字朋友圈工具 `publish_moment` 及稳定意图查询，由 MCP 管理授权、频率、次数和暂停；原生发帖仍存在延迟安全退出风险，见[朋友圈配置与限制](docs/SNS.md)。
 
 桥接通过 HTTP 访问 `client_hook`，不读取其数据库或直接调用微信 DLL。非文字事件本身不触发回复；资源读取与回复均受授权约束。
 
@@ -74,7 +75,11 @@ python -B -X utf8 .\wechat_mcp\bridge.py serve `
 
 状态目录含消息正文；Windows 密钥使用当前用户 DPAPI 封装，跨用户或设备迁移不能直接解密。
 
-工具参数、资源接口和状态定义见 [API.md](docs/API.md)，群聊规则见 [GROUP_MENTIONS.md](docs/GROUP_MENTIONS.md)。本地回归命令：
+工具参数、资源接口和状态定义见 [API.md](docs/API.md)，群聊规则见 [GROUP_MENTIONS.md](docs/GROUP_MENTIONS.md)。
+
+朋友圈接入的接口边界、策略职责及开发验收要求见 [SNS_HANDOFF.md](docs/SNS_HANDOFF.md)。
+
+本地回归命令：
 
 ```powershell
 python -B -X utf8 -W error::ResourceWarning .\wechat_mcp\run_tests.py

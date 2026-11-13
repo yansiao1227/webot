@@ -15,6 +15,52 @@ from wechat_bridge.service import Bridge
 
 @unittest.skipUnless((HOOK / 'api/server.py').exists(), '独立拷贝未附带 client_hook，跳过可选 HTTP 合同测试')
 class ClientHookContract(unittest.TestCase):
+    def test_moment_publish_through_actual_hook_http_and_durable_queue(self):
+        sys.path.insert(0, str(HOOK))
+        from api.backend import FixtureBackend
+        from api.server import Application, Server
+        from wechat_bridge import sns
+
+        class PublishingFixture(FixtureBackend):
+            def __init__(self):
+                super().__init__()
+                self.published = []
+
+            def sns_capabilities(self):
+                return {'publish': True}
+
+            def sns_validate(self, account, action, params):
+                pass  # 模拟能力；绝不加载DLL或连接微信。
+
+            def sns_execute(self, account, action, params, request_id):
+                self.published.append((account, action, params, request_id))
+                return {'state': 'confirmed', 'local_accepted': True, 'server_confirmed': True,
+                        'post_id': '18446744073709551614', 'simulation': True}
+
+        with tempfile.TemporaryDirectory() as temp:
+            backend = PublishingFixture()
+            app = Application(Path(temp) / 'hook', backend)
+            server = Server(('127.0.0.1', 0), app, token='contract-test-token')
+            thread = threading.Thread(target=server.serve_forever); thread.start()
+            bridge = Bridge(Path(temp) / 'bridge', HookClient(f'http://127.0.0.1:{server.server_port}', 'contract-test-token'),
+                            backend.account, ['wxid_sim_peer'], True,
+                            sns_policy={'allow_direct': True})
+            try:
+                first = sns.publish(bridge, 'publish-contract', '本机模拟HTTP契约 😀')
+                deadline = time.monotonic() + 3
+                current = first
+                while current['state'] in ('queued', 'running') and time.monotonic() < deadline:
+                    time.sleep(.02)
+                    current = sns.status(bridge, 'publish-contract')
+                self.assertEqual(current['state'], 'confirmed')
+                self.assertEqual(current['operation']['result']['post_id'], '18446744073709551614')
+                self.assertEqual(sns.publish(bridge, 'publish-contract', '本机模拟HTTP契约 😀'), current)
+                self.assertEqual(len(backend.published), 1)
+                self.assertEqual(backend.published[0][2], {'text': '本机模拟HTTP契约 😀', 'visibility': 'public'})
+                self.assertEqual(backend.published[0][3], first['request_id'])
+            finally:
+                bridge.close(); server.shutdown(); server.server_close(); thread.join(); app.close()
+
     def test_real_http_application_simulated_backend(self):
         sys.path.insert(0, str(HOOK))
         from api.backend import FixtureBackend

@@ -90,6 +90,8 @@ class Store:
             if row and row[0] != identity:
                 raise ValueError('状态目录的账号或模拟模式不匹配；请使用独立目录')
             self.db.execute("INSERT OR IGNORE INTO meta VALUES('identity',?)", (identity,))
+            from .sns import initialize as initialize_sns
+            initialize_sns(self.db)
             self.db.execute("UPDATE deliveries SET state='pending' WHERE state='delivering'")
             for record in self.db.execute('SELECT event_id,account,conversation,event FROM inbox').fetchall():
                 value = json.loads(record['event'])

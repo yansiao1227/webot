@@ -12,13 +12,19 @@ def schema(properties, required=()):
     return {'type': 'object', 'properties': properties, 'required': list(required), 'additionalProperties': False}
 
 
-def tool(name, title, description, properties, required=(), read=True, destructive=False):
+def tool(name, title, description, properties, required=(), read=True, destructive=False, open_world=False):
     return {'name': name, 'title': title, 'description': description, 'inputSchema': schema(properties, required),
-            'annotations': {'readOnlyHint': read, 'destructiveHint': destructive, 'openWorldHint': False,
+            'annotations': {'readOnlyHint': read, 'destructiveHint': destructive, 'openWorldHint': open_world,
                             'idempotentHint': True}}
 
 
 TOOLS = [
+    tool('publish_moment', '发布公开文字朋友圈',
+         '仅支持当前绑定账号公开纯文字。intent_id稳定绑定一次业务意图，重复调用只查询；未知不得换ID重发。微信入站触发必须传event_id并通过专门会话授权及群真实@。直接调用须本机策略授权。',
+         {'intent_id': STRING, 'text': STRING, 'event_id': STRING}, ['intent_id', 'text'], read=False, destructive=True, open_world=True),
+    tool('get_moment_publish_status', '查询朋友圈发布状态',
+         '仅查询原业务意图，不补发。accepted仅为本地接受；confirmed表示Hook取得服务器结果和帖子ID，不代表风控安全。',
+         {'intent_id': STRING}, ['intent_id']),
     tool('reply_text_part','分段回复入站指令','同一事件进度与最终回复合计最多64段，序号从0连续递增；每段唯一发送意图。未知发送只查询原段，禁止跳到下一段或换序号重发。每段再次核验群真实@。',
          {'event_id':STRING,'part_index':{'type':'integer','minimum':0,'maximum':63},
           'text':STRING,'final':{'type':'boolean'}},['event_id','part_index','text','final'],read=False,destructive=True),
@@ -186,6 +192,9 @@ class Protocol:
         if 'consumer_id' in args and not re.fullmatch(r'[A-Za-z0-9_-]{1,63}', args['consumer_id']):
             raise ValueError('consumer_id 格式无效')
         b = self.bridge
+        if name in ('publish_moment', 'get_moment_publish_status'):
+            from . import sns
+            return (sns.publish(b, **args) if name == 'publish_moment' else sns.status(b, **args))
         if name in ('authorize_schedule', 'revoke_schedule', 'get_schedule_authorization', 'send_scheduled_text', 'get_scheduled_text_status'):
             from . import schedules
             handler = {'authorize_schedule': schedules.authorize, 'revoke_schedule': schedules.revoke,
@@ -199,7 +208,9 @@ class Protocol:
         if name in ('mark_conversation_read', 'get_conversation_read_status'):
             return b.mark_conversation_read(args['event_id'], name == 'get_conversation_read_status')
         if name == 'bridge_status':
+            from .sns import policy_status
             return {'simulation': b.simulation, 'account': b.account,
+                    'sns_policy': policy_status(b.store, b.sns_policy),
                     'allowed_conversations': sorted(b.conversations),
                     'context_policy': {'complete_events': True, 'retention_days': 7},
                     'reference_policy': {'require_native_reference': True, 'exact_same_conversation': True,

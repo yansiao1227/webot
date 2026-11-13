@@ -34,11 +34,16 @@ def iso(value):
 
 
 class Bridge:
-    def __init__(self, directory, hook, account, conversations, simulation=False, consumer='mcp-bridge', start='latest'):
+    def __init__(self, directory, hook, account, conversations, simulation=False, consumer='mcp-bridge', start='latest', sns_policy=None):
         if not account or not conversations or len(conversations) > 100 or any(not isinstance(x, str) or not 1 <= len(x) <= 511 for x in conversations):
             raise ValueError('必须指定账号和至少一个允许会话')
         self.account, self.conversations = account, frozenset(conversations)
         self.simulation, self.hook, self.consumer, self.start = simulation, hook, consumer, start
+        from .sns import policy
+        self.sns_policy = policy(sns_policy)
+        if not set(self.sns_policy['event_conversations']).issubset(self.conversations):
+            raise ValueError('朋友圈授权会话必须属于MCP会话白名单')
+        self.sns_lock = threading.Lock()
         self.store = Store(directory, account, simulation)
         self.callbacks = CallbackHTTP(simulation)
         self.stop = threading.Event()
@@ -123,8 +128,13 @@ class Bridge:
         return self.hook.request('GET', path)
 
     def verify_account(self):
-        if self.hook.request('POST', '/GetSelfProfile', {}).get('wxid') != self.account:
-            raise ValueError('资源获取时上游账号不匹配')
+        try:
+            if self.hook.request('POST', '/GetSelfProfile', {}).get('wxid') != self.account:
+                raise ValueError('资源获取时上游账号不匹配')
+        except Exception:
+            from .sns import source_fault
+            source_fault(self, 'upstream_account_unverified')
+            raise
 
     def collect_once(self, timeout=30):
         batch = self.hook.request('GET', '/messages?' + urlencode({'consumer_id': self.consumer, 'timeout': timeout, 'limit': 100}))
@@ -137,7 +147,9 @@ class Bridge:
             self.hook.request('POST', '/consumers/' + quote(self.consumer, safe='') + '/ack', {'ack_token': batch['ack_token']})
         capture = batch.get('capture', {})
         self.store.meta('source', {'state': capture.get('state', 'unknown'), 'last_poll': time.time()})
-        if not batch['events'] and capture.get('state') != 'running':
+        if capture.get('state') != 'running':
+            from .sns import source_fault
+            source_fault(self, 'upstream_capture_unavailable')
             raise ValueError('上游采集未运行')
 
     def collect_loop(self):
@@ -157,6 +169,8 @@ class Bridge:
                            'http_status': getattr(error, 'status', None), 'at': time.time()}
                 self.worker_errors['source'] = failure
                 try:
+                    from .sns import source_fault
+                    source_fault(self, 'upstream_unavailable')
                     self.store.meta('source', failure)
                 except Exception:
                     pass

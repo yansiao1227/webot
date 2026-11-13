@@ -73,6 +73,14 @@ def main():
     serve.add_argument('--consumer-id', default='mcp-bridge')
     serve.add_argument('--start', choices=['earliest', 'latest'], default='latest')
     serve.add_argument('--simulate', action='store_true', help='模拟上游，仅回环事件回调')
+    serve.add_argument('--sns-config', type=Path, help='MCP朋友圈授权与限频策略JSON；默认读取状态目录sns-policy.json，不存在时使用默认策略')
+    sns_admin = sub.add_parser('sns-policy', help='停止MCP后，本机显式暂停、恢复或查看朋友圈暂停状态')
+    sns_admin.add_argument('--state-dir', type=Path, default=ROOT / 'state/live')
+    sns_admin.add_argument('--account', required=True)
+    sns_admin.add_argument('--simulate', action='store_true')
+    sns_admin.add_argument('action', choices=['status', 'pause', 'resume'])
+    sns_admin.add_argument('--close-unknown', action='append', default=[], metavar='INTENT_ID',
+                           help='仅随resume人工结案指定旧unknown：保留原结果、禁止重发，允许未来独立意图')
     scenario = sub.add_parser('demo')
     scenario.add_argument('--state-dir', type=Path, default=ROOT / ('state/demo-' + uuid.uuid4().hex[:10]))
     sub.add_parser('doctor')
@@ -84,6 +92,18 @@ def main():
     if args.command == 'demo':
         demo(args.state_dir)
         return
+    if args.command == 'sns-policy':
+        if args.close_unknown and args.action != 'resume':
+            parser.error('--close-unknown 只能用于 sns-policy resume')
+        from .store import Store
+        from .sns import policy_status, set_pause
+        store = Store(args.state_dir, args.account, args.simulate)
+        try:
+            print(json.dumps(policy_status(store) if args.action == 'status' else
+                             set_pause(store, args.action == 'pause', close_unknown=args.close_unknown), ensure_ascii=False))
+        finally:
+            store.close()
+        return
     if args.transport == 'http' and len(os.getenv('MCP_BRIDGE_TOKEN', '')) < 24:
         parser.error('请先设置至少 24 字符的 MCP_BRIDGE_TOKEN 环境变量')
     simulator = SimulatedHook() if args.simulate else None
@@ -93,9 +113,11 @@ def main():
         parser.error('真实模式需要 --account 和 --allow-conversation')
     if simulator and args.state_dir == ROOT / 'state/live':
         args.state_dir = ROOT / 'state/simulation'
-    hook = HookClient(simulator.url if simulator else args.hook_url, None if simulator else os.getenv('CLIENT_HOOK_TOKEN'))
+    from .sns import load_policy
     try:
-        bridge = Bridge(args.state_dir, hook, account, conversations, bool(simulator), args.consumer_id, args.start)
+        sns_policy = load_policy(args.state_dir, args.sns_config)
+        hook = HookClient(simulator.url if simulator else args.hook_url, None if simulator else os.getenv('CLIENT_HOOK_TOKEN'))
+        bridge = Bridge(args.state_dir, hook, account, conversations, bool(simulator), args.consumer_id, args.start, sns_policy)
     except BaseException:
         if simulator:
             simulator.close()
