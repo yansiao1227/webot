@@ -235,28 +235,41 @@ class BackendTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_runtime_preparation_does_not_consume_response_budget(self):
         await self.backend.ensure_thread('peer')
-        async def start(*args,**kwargs):
-            await asyncio.sleep(.04)
-            return self.handle
-        self.thread.turn.side_effect=start
+        # 只推进被测clock，避免15ms睡眠在机器负载下消耗30ms预算。
+        # 生产wait超时及中断由其他测试覆盖；此处锁定准备/响应阶段切换。
+        from local_agent.progress import DecisionClock
+        clocks, virtual = [], [0]
+        def clock_factory(*args, **kwargs):
+            clock = DecisionClock(*args, **kwargs)
+            virtual[0] = clock.loop.time()
+            clock.loop = SimpleNamespace(time=lambda: virtual[0])
+            async def wait(task):
+                return await task
+            clock.wait = wait
+            clocks.append(clock)
+            return clock
         async def notifications():
-            await asyncio.sleep(.04)
+            virtual[0] += 2  # 准备耗时超过整个决定预算，但仍在启动预算内。
+            self.assertIsNotNone(clocks[0].startup_deadline)
+            self.assertGreater(clocks[0].deadline(), virtual[0])
             yield SimpleNamespace(method='item/completed',payload={'turnId':'turn-1',
                 'item':{'id':'input','type':'functionCallOutput','name':'wechat_message'}})
-            await asyncio.sleep(.015)
+            self.assertIsNone(clocks[0].startup_deadline)
             for _ in range(5):
+                virtual[0] += .2
+                self.assertGreater(clocks[0].deadline(), virtual[0])
                 yield SimpleNamespace(method='item/agentMessage/delta',payload={'turnId':'turn-1',
                     'itemId':'answer','delta':'x'})
-                await asyncio.sleep(.015)
         self.handle.stream=notifications
         async def collect(stream,turn_id):
             async for _ in stream:pass
             return SimpleNamespace(status='completed',id=turn_id,duration_ms=100,items=[],
                 final_response=json.dumps({'reply':'完整答案'}))
         callback=AsyncMock()
-        with patch.dict(sys.modules,{'openai_codex._run':SimpleNamespace(_collect_async_turn_result=collect)}):
+        with patch.dict(sys.modules,{'openai_codex._run':SimpleNamespace(_collect_async_turn_result=collect)}), \
+                patch('local_agent.codex_backend.DecisionClock', side_effect=clock_factory):
             reply,_=await self.backend.generate_with_progress('thread-1',
-                {**event(),'_decision_timeout':.03,'_startup_timeout':.2,'_generation_idle_timeout':.06},callback)
+                {**event(),'_decision_timeout':1,'_startup_timeout':5,'_generation_idle_timeout':.6},callback)
         self.assertEqual(reply,'完整答案')
         callback.assert_not_awaited()
         self.handle.interrupt.assert_not_awaited()
